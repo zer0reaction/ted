@@ -105,11 +105,13 @@ typedef struct buffer_t {
 
     u32 cursor;
     u32 row_offset;
+    u32 last_visual_col;
 } buffer_t;
 
 
 u32 get_cursor_row(buffer_t *b);
 u32 update_row_offset(buffer_t *b, u16 height);
+u8 utf8_byte_size(char c);
 
 u32 lines_tokenize(lines_t *lines, const sb_t sb);
 
@@ -118,6 +120,8 @@ void buffer_kill(buffer_t *b);
 
 void move_down(buffer_t *b);
 void move_up(buffer_t *b);
+void move_right(buffer_t *b);
+void move_left(buffer_t *b);
 
 void render(buffer_t *b);
 
@@ -144,6 +148,19 @@ u32 update_row_offset(buffer_t *b, u16 height)
     }
 
     return absolute_row;
+}
+
+u8 utf8_byte_size(char c)
+{
+    u8 byte = (u8)c;
+
+    if      (byte <= 127) return 1;
+    else if (byte >= 128 && byte <= 191) return 0;
+    else if (byte >= 192 && byte <= 223) return 2;
+    else if (byte >= 224 && byte <= 239) return 3;
+    else if (byte >= 240 && byte <= 247) return 4;
+
+    assert(0 && "unreachable");
 }
 
 u32 lines_tokenize(lines_t *lines, const sb_t sb)
@@ -198,17 +215,82 @@ void buffer_kill(buffer_t *b)
 void move_down(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
+
     if (cursor_row + 1 < b->lines.size) {
         line_t next_line = b->lines.items[cursor_row + 1];
-        b->cursor = next_line.begin;
+
+        u32 next_line_visual_len = 0;
+        for (u32 i = next_line.begin; i < next_line.end; ) {
+            next_line_visual_len += 1;
+            i += utf8_byte_size(b->data.items[i]);
+        }
+
+        if (b->last_visual_col > next_line_visual_len) {
+            b->cursor = next_line.end;
+        } else {
+            b->cursor = next_line.begin;
+            for (u32 i = 0; i < b->last_visual_col; ++i) {
+                b->cursor += utf8_byte_size(b->data.items[b->cursor]);
+            }
+        }
     }
 }
 
 void move_up(buffer_t *b) {
     u32 cursor_row = get_cursor_row(b);
+
     if (cursor_row > 0) {
-        line_t prev_line = b->lines.items[cursor_row - 1];
-        b->cursor = prev_line.begin;
+        line_t next_line = b->lines.items[cursor_row - 1];
+
+        u32 next_line_visual_len = 0;
+        for (u32 i = next_line.begin; i < next_line.end; ) {
+            next_line_visual_len += 1;
+            i += utf8_byte_size(b->data.items[i]);
+        }
+
+        if (b->last_visual_col > next_line_visual_len) {
+            b->cursor = next_line.end;
+        } else {
+            b->cursor = next_line.begin;
+            for (u32 i = 0; i < b->last_visual_col; ++i) {
+                b->cursor += utf8_byte_size(b->data.items[b->cursor]);
+            }
+        }
+    }
+}
+
+void move_right(buffer_t *b)
+{
+    if (b->cursor < b->data.size) {
+        b->cursor += utf8_byte_size(b->data.items[b->cursor]);
+
+        u32 cursor_row = get_cursor_row(b);
+        line_t cursor_line = b->lines.items[cursor_row];
+
+        b->last_visual_col = 0;
+        for (u32 i = cursor_line.begin; i < b->cursor; ) {
+            b->last_visual_col++;
+            i += utf8_byte_size(b->data.items[i]);
+        }
+    }
+}
+
+void move_left(buffer_t *b)
+{
+    if (b->cursor > 0) {
+        b->cursor--;
+        while (utf8_byte_size(b->data.items[b->cursor]) == 0) {
+            b->cursor--;
+        }
+
+        u32 cursor_row = get_cursor_row(b);
+        line_t cursor_line = b->lines.items[cursor_row];
+
+        b->last_visual_col = 0;
+        for (u32 i = cursor_line.begin; i < b->cursor; ) {
+            b->last_visual_col++;
+            i += utf8_byte_size(b->data.items[i]);
+        }
     }
 }
 
@@ -221,7 +303,9 @@ void render(buffer_t *b)
 
     u16 cursor_visual_col = 0;
 
-    for (u32 i = 0; i < (u32)LINES && i < b->data.size; ++i) {
+    for (u32 i = 0; i < (u32)LINES; ++i) {
+        if (i + b->row_offset >= b->lines.size) break;
+
         line_t line = b->lines.items[i + b->row_offset];
         u16 y = 0;
         for (u32 j = 0; j < line.end - line.begin; ) {
@@ -231,7 +315,7 @@ void render(buffer_t *b)
             assert(ret != -1);
             mvaddwstr(i, y, wch);
 
-            if (i == (u32)cursor_row &&
+            if (i + b->row_offset == (u32)cursor_row &&
                 line.begin + j < b->cursor)
             {
                 cursor_visual_col++;
@@ -276,6 +360,12 @@ int main(int argc, char **argv)
             break;
         case 'k':
             move_up(&b);
+            break;
+        case 'l':
+            move_right(&b);
+            break;
+        case 'h':
+            move_left(&b);
             break;
         }
     }
