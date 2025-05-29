@@ -2,7 +2,7 @@
 
 CC='gcc'
 CFLAGS='-Wall -Wextra -std=c99 -pedantic -fsanitize=address'
-LDFLAGS='-lncurses'
+LDFLAGS='-lncursesw'
 
 set -xe
 
