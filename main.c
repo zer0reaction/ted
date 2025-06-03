@@ -1,33 +1,75 @@
-#define _XOPEN_SOURCE_EXTENDED
-
-#include <ncurses.h>
+#include <term.h>
+#include <termios.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 #include <locale.h>
+#include <unistd.h>
 
 #include "main.h"
 
 int main(int argc, char **argv)
 {
+    assert(sizeof(u8) == 1);
+    assert(sizeof(s8) == 1);
+    assert(sizeof(u16) == 2);
+    assert(sizeof(s16) == 2);
+    assert(sizeof(u32) == 4);
+    assert(sizeof(s32) == 4);
+    assert(sizeof(u64) == 8);
+    assert(sizeof(s64) == 8);
+
     setlocale(LC_ALL, "en_US.utf-8");
 
-    if (argc != 2) return 1;
+    if (argc != 2) {
+        printf("specify a file\n");
+        return 1;
+    }
 
     buffer_t b = {0};
-    if (buffer_from_file(&b, argv[1]) == 0) return 1;
+    if (buffer_from_file(&b, argv[1]) == 0) {
+        printf("no file found\n");
+        return 1;
+    }
 
-    initscr();
-    noecho();
-    nl();
-    cbreak();
+    char *term = getenv("TERM");
+    if (!term) {
+        printf("TERM environment variable not found\n");
+        return 1;
+    }
+
+    int ret = tgetent(NULL, term);
+    if (ret != 1) {
+        printf("terminal is not in terminfo database\n");
+        return 2;
+    }
+
+    struct termios original_settings = {0};
+    assert(tcgetattr(STDIN_FILENO, &original_settings) != -1);
+
+    struct termios raw_mode = original_settings;
+    raw_mode.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
+    raw_mode.c_iflag &= ~(IXON | ICRNL);
+    raw_mode.c_oflag &= ~(OPOST);
+    raw_mode.c_cc[VMIN] = 1;
+    raw_mode.c_cc[VTIME] = 0;
+
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_mode);
+
+    printf("\033[?1049h"); // enable alternative buffer
+
+    s16 term_width = tgetnum("co");
+    s16 term_height = tgetnum("li");
+    assert(term_width != -1 && term_height != -1);
 
     bool should_close = false;
     while (!should_close) {
-        render(&b);
+        render(&b, term_width, term_height);
 
-        int c = getch();
+        char c;
+        if (read(STDIN_FILENO, &c, 1) != 1) break;
 
         switch (c) {
         case 'q':
@@ -48,17 +90,68 @@ int main(int argc, char **argv)
         }
     }
 
-    endwin();
     buffer_kill(&b);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_settings);
+    printf("\033[?1049l"); // disable alternative buffer
     return 0;
+}
+
+// render functions
+
+// row and col start with 1
+void term_move_cursor(u16 row, u16 col)
+{
+    printf("\033[%d;%dH", row, col);
+}
+
+void render(buffer_t *b, u16 term_width, u16 term_height)
+{
+    printf("\033[?25l"); // hide cursor
+
+    u16 cursor_visual_col = 1;
+    u32 cursor_row = update_row_offset(b, term_height);
+
+    for (u32 row_i = 0; row_i < term_height; ++row_i) {
+        if (b->row_offset + row_i >= b->data.size) break;
+
+        line_t line = b->line_tokens.items[b->row_offset + row_i];
+        u16 y = 1;
+
+        term_move_cursor(row_i + 1, 1);
+
+        for (u32 char_i = 0; char_i < line.end - line.begin;) {
+            u8 size = utf8_byte_size(b->data.items[line.begin + char_i]);
+            for (u8 i = 0; i < size; ++i) {
+                putchar(b->data.items[line.begin + char_i + i]);
+            }
+
+            y++;
+            char_i += size;
+        }
+
+        for (; y <= term_width; ++y) {
+            putchar(' ');
+        }
+
+        if (b->row_offset + row_i == cursor_row) {
+            for (u32 k = line.begin; k < b->cursor;) {
+                cursor_visual_col++;
+                k += utf8_byte_size(b->data.items[k]);
+            }
+        }
+    }
+
+    printf("\033[?25h"); // show cursor
+    term_move_cursor(cursor_row - b->row_offset + 1, cursor_visual_col);
+    fflush(stdout);
 }
 
 // utility functions
 
 u32 get_cursor_row(buffer_t *b)
 {
-    for (u32 i = 0; i < b->lines.size; ++i) {
-        line_t line = b->lines.items[i];
+    for (u32 i = 0; i < b->line_tokens.size; ++i) {
+        line_t line = b->line_tokens.items[i];
         if (b->cursor >= line.begin && b->cursor <= line.end) {
             return i;
         }
@@ -95,24 +188,24 @@ u8 utf8_byte_size(char c)
 
 // lines functions
 
-u32 lines_tokenize(lines_t *lines, const sb_t sb)
+u32 lines_tokenize(lines_t *line_tokens, const sb_t sb)
 {
-    lines->size = 0;
+    line_tokens->size = 0;
 
     line_t line = {0};
 
     for (u32 i = 0; i < sb.size; ++i) {
         if (sb.items[i] == '\n') {
             line.end = i;
-            lines_append(lines, line);
+            lines_append(line_tokens, line);
             line.begin = i + 1;
             line.end = 0;
         }
     }
     line.end = sb.size;
-    lines_append(lines, line);
+    lines_append(line_tokens, line);
 
-    return lines->size;
+    return line_tokens->size;
 }
 
 // buffer functions
@@ -133,16 +226,16 @@ u32 buffer_from_file(buffer_t *b, const char *path)
     b->data.cap = file_size;
     fread(b->data.items, 1, file_size, fp);
 
-    lines_tokenize(&b->lines, b->data);
+    lines_tokenize(&b->line_tokens, b->data);
 
     fclose(fp);
-    return b->lines.size;
+    return b->line_tokens.size;
 }
 
 void buffer_kill(buffer_t *b)
 {
     sb_free(&b->data);
-    lines_free(&b->lines);
+    lines_free(&b->line_tokens);
     memset(b, 0, sizeof(buffer_t));
 }
 
@@ -152,8 +245,8 @@ void move_down(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
-    if (cursor_row + 1 < b->lines.size) {
-        line_t next_line = b->lines.items[cursor_row + 1];
+    if (cursor_row + 1 < b->line_tokens.size) {
+        line_t next_line = b->line_tokens.items[cursor_row + 1];
 
         u32 next_line_visual_len = 0;
         for (u32 i = next_line.begin; i < next_line.end; ) {
@@ -172,11 +265,12 @@ void move_down(buffer_t *b)
     }
 }
 
-void move_up(buffer_t *b) {
+void move_up(buffer_t *b)
+{
     u32 cursor_row = get_cursor_row(b);
 
     if (cursor_row > 0) {
-        line_t next_line = b->lines.items[cursor_row - 1];
+        line_t next_line = b->line_tokens.items[cursor_row - 1];
 
         u32 next_line_visual_len = 0;
         for (u32 i = next_line.begin; i < next_line.end; ) {
@@ -201,7 +295,7 @@ void move_right(buffer_t *b)
         b->cursor += utf8_byte_size(b->data.items[b->cursor]);
 
         u32 cursor_row = get_cursor_row(b);
-        line_t cursor_line = b->lines.items[cursor_row];
+        line_t cursor_line = b->line_tokens.items[cursor_row];
 
         b->last_visual_col = 0;
         for (u32 i = cursor_line.begin; i < b->cursor; ) {
@@ -220,7 +314,7 @@ void move_left(buffer_t *b)
         }
 
         u32 cursor_row = get_cursor_row(b);
-        line_t cursor_line = b->lines.items[cursor_row];
+        line_t cursor_line = b->line_tokens.items[cursor_row];
 
         b->last_visual_col = 0;
         for (u32 i = cursor_line.begin; i < b->cursor; ) {
@@ -228,43 +322,4 @@ void move_left(buffer_t *b)
             i += utf8_byte_size(b->data.items[i]);
         }
     }
-}
-
-// render functions
-
-void render(buffer_t *b)
-{
-    u32 cursor_row = update_row_offset(b, LINES);
-
-    erase();
-    curs_set(0);
-
-    u16 cursor_visual_col = 0;
-
-    for (u32 i = 0; i < (u32)LINES; ++i) {
-        if (i + b->row_offset >= b->lines.size) break;
-
-        line_t line = b->lines.items[i + b->row_offset];
-        u16 y = 0;
-        for (u32 j = 0; j < line.end - line.begin; ) {
-            wchar_t wch[2] = {0};
-            int ret = mbtowc(wch, &b->data.items[line.begin + j], 4);
-
-            assert(ret != -1);
-            mvaddwstr(i, y, wch);
-
-            if (i + b->row_offset == (u32)cursor_row &&
-                line.begin + j < b->cursor)
-            {
-                cursor_visual_col++;
-            }
-            y++;
-            j += ret;
-        }
-    }
-
-    move(cursor_row - b->row_offset, cursor_visual_col);
-
-    curs_set(1);
-    refresh();
 }

@@ -55,8 +55,8 @@ do {                                                             \
 } while (0)
 
 
-#define lines_free(lines) da_free(lines)
-#define lines_append(lines, line) da_append(lines, line)
+#define lines_free(line_tokens) da_free(line_tokens)
+#define lines_append(line_tokens, line) da_append(line_tokens, line)
 
 #define sb_free(sb) da_free(sb)
 #define sb_append_char(sb, c) da_append(sb, (char)c)
@@ -95,7 +95,7 @@ typedef struct sb_t {
 
 typedef struct buffer_t {
     sb_t data;
-    lines_t lines;
+    lines_t line_tokens;
 
     u32 cursor;
     u32 row_offset;
@@ -103,13 +103,17 @@ typedef struct buffer_t {
 } buffer_t;
 
 
+// render functions
+void term_move_cursor(u16 row, u16 col);
+void render(buffer_t *b, u16 term_width, u16 term_height);
+
 // utility functions
 u32 get_cursor_row(buffer_t *b);
 u32 update_row_offset(buffer_t *b, u16 height);
 u8 utf8_byte_size(char c);
 
 // lines functions
-u32 lines_tokenize(lines_t *lines, const sb_t sb);
+u32 lines_tokenize(lines_t *line_tokens, const sb_t sb);
 
 // buffer functions
 u32 buffer_from_file(buffer_t *b, const char *path);
@@ -120,8 +124,5 @@ void move_down(buffer_t *b);
 void move_up(buffer_t *b);
 void move_right(buffer_t *b);
 void move_left(buffer_t *b);
-
-// render functions
-void render(buffer_t *b);
 
 #endif // MAIN_H_
