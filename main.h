@@ -33,38 +33,30 @@ do {                                                             \
     (da)->size += 1;                                             \
 } while (0)
 
-#define da_append_many(da, xs, n)                                \
+#define lines_free da_free
+#define lines_append da_append
+
+#define sb_free da_free
+#define sb_insert_buf(sb, buf, len, pos)                         \
 do {                                                             \
-    assert((da)->size <= (da)->cap);                             \
-    assert(sizeof(*(da)->items) == sizeof(*xs));                 \
+    assert((sb)->size <= (sb)->cap);                             \
+    assert((pos) <= (sb)->size);                                 \
                                                                  \
-    if ((da)->items == NULL) {                                   \
-        (da)->items = realloc((da)->items, 0);                   \
+    if ((sb)->items == NULL) {                                   \
+        (sb)->items = realloc((sb)->items, 0);                   \
     }                                                            \
                                                                  \
-    if ((da)->size + (n) > (da)->cap) {                          \
-        (da)->cap = max(((da)->cap + (n)) * 2, DA_INIT_CAP);     \
-        (da)->items = realloc((da)->items,                       \
-                              sizeof(*(da)->items) * (da)->cap); \
+    if ((sb)->size + (len) > (sb)->cap) {                        \
+        (sb)->cap = max(((sb)->cap + (len)) * 2, DA_INIT_CAP);   \
+        (sb)->items = realloc((sb)->items, (sb)->cap);           \
     }                                                            \
                                                                  \
-    for (u32 i = 0; i < (n); ++i) {                              \
-        (da)->items[(da)->size + i] = (xs)[i];                   \
-    }                                                            \
-    (da)->size += (n);                                           \
-} while (0)
-
-
-#define lines_free(line_tokens) da_free(line_tokens)
-#define lines_append(line_tokens, line) da_append(line_tokens, line)
-
-#define sb_free(sb) da_free(sb)
-#define sb_append_char(sb, c) da_append(sb, (char)c)
-#define sb_append_cstr(sb, cstr)  \
-do {                              \
-    const char *s = (cstr);       \
-    u32 len = strlen(s);          \
-    da_append_many((sb), s, len); \
+    memmove(&(sb)->items[(pos) + (len)],                         \
+            &(sb)->items[(pos)],                                 \
+            (sb)->size - (pos));                                 \
+    memcpy(&(sb)->items[(pos)], (buf), (len));                   \
+                                                                 \
+    (sb)->size += (len);                                         \
 } while (0)
 
 typedef signed char s8;
@@ -93,9 +85,15 @@ typedef struct sb_t {
     u32 cap;
 } sb_t;
 
+typedef enum buffer_mode_t {
+    NORMAL_MODE = 0,
+    INSERT_MODE = 1
+} buffer_mode_t;
+
 typedef struct buffer_t {
     sb_t data;
     lines_t line_tokens;
+    buffer_mode_t mode;
 
     u32 cursor;
     u32 row_offset;
@@ -124,5 +122,6 @@ void move_down(buffer_t *b);
 void move_up(buffer_t *b);
 void move_right(buffer_t *b);
 void move_left(buffer_t *b);
+void insert_char_at_cursor(buffer_t *b, char c);
 
 #endif // MAIN_H_

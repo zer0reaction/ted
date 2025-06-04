@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 
     struct termios raw_mode = original_settings;
     raw_mode.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
-    raw_mode.c_iflag &= ~(IXON | ICRNL);
+    raw_mode.c_iflag &= ~(IXON) | ICRNL;
     raw_mode.c_oflag &= ~(OPOST);
     raw_mode.c_cc[VMIN] = 1;
     raw_mode.c_cc[VTIME] = 0;
@@ -71,22 +71,35 @@ int main(int argc, char **argv)
         char c;
         if (read(STDIN_FILENO, &c, 1) != 1) break;
 
-        switch (c) {
-        case 'q':
-            should_close = true;
-            break;
-        case 'j':
-            move_down(&b);
-            break;
-        case 'k':
-            move_up(&b);
-            break;
-        case 'l':
-            move_right(&b);
-            break;
-        case 'h':
-            move_left(&b);
-            break;
+        if (b.mode == NORMAL_MODE) {
+            switch (c) {
+            case 'q':
+                should_close = true;
+                break;
+            case 'i':
+                b.mode = INSERT_MODE;
+                break;
+            case 'j':
+                move_down(&b);
+                break;
+            case 'k':
+                move_up(&b);
+                break;
+            case 'l':
+                move_right(&b);
+                break;
+            case 'h':
+                move_left(&b);
+                break;
+            }
+        } else if (b.mode == INSERT_MODE) {
+            switch (c) {
+            case 033:
+                b.mode = NORMAL_MODE;
+                break;
+            default:
+                insert_char_at_cursor(&b, c);
+            }
         }
     }
 
@@ -321,5 +334,34 @@ void move_left(buffer_t *b)
             b->last_visual_col++;
             i += utf8_byte_size(b->data.items[i]);
         }
+    }
+}
+
+void insert_char_at_cursor(buffer_t *b, char c)
+{
+    static u8 size = 0;
+    static u8 accum = 0;
+    static char buf[4] = {0};
+
+    if (utf8_byte_size(c) > 0) {
+        size = utf8_byte_size(c);
+        accum = 0;
+        memset(buf, 0, 4);
+    }
+
+    buf[accum++] = c;
+
+    if (accum == size && accum != 0) {
+        sb_insert_buf(&b->data, buf, size, b->cursor);
+
+        b->cursor += size;
+
+        if (buf[0] == '\n') {
+            b->last_visual_col = 0;
+        } else {
+            b->last_visual_col += 1;
+        }
+
+        lines_tokenize(&b->line_tokens, b->data);
     }
 }
