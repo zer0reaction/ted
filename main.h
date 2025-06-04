@@ -33,31 +33,35 @@ do {                                                             \
     (da)->size += 1;                                             \
 } while (0)
 
+#define da_insert_many(da, xs, n, pos)                           \
+do {                                                             \
+    assert((da)->size <= (da)->cap);                             \
+    assert((pos) <= (da)->size);                                 \
+                                                                 \
+    if ((da)->items == NULL) {                                   \
+        (da)->items = realloc((da)->items, 0);                   \
+    }                                                            \
+                                                                 \
+    if ((da)->size + (n) > (da)->cap) {                          \
+        (da)->cap = max(((da)->cap + (n)) * 2, DA_INIT_CAP);     \
+        (da)->items = realloc((da)->items,                       \
+                              sizeof(*(da)->items) * (da)->cap); \
+    }                                                            \
+                                                                 \
+    memmove(&(da)->items[(pos) + (n)],                           \
+            &(da)->items[(pos)],                                 \
+            sizeof(*(da)->items) * ((da)->size - (pos)));        \
+    memcpy(&(da)->items[(pos)], (xs),                            \
+           sizeof(*(da)->items) * (n));                          \
+                                                                 \
+    (da)->size += (n);                                           \
+} while (0)
+
 #define lines_free da_free
 #define lines_append da_append
 
 #define sb_free da_free
-#define sb_insert_buf(sb, buf, len, pos)                         \
-do {                                                             \
-    assert((sb)->size <= (sb)->cap);                             \
-    assert((pos) <= (sb)->size);                                 \
-                                                                 \
-    if ((sb)->items == NULL) {                                   \
-        (sb)->items = realloc((sb)->items, 0);                   \
-    }                                                            \
-                                                                 \
-    if ((sb)->size + (len) > (sb)->cap) {                        \
-        (sb)->cap = max(((sb)->cap + (len)) * 2, DA_INIT_CAP);   \
-        (sb)->items = realloc((sb)->items, (sb)->cap);           \
-    }                                                            \
-                                                                 \
-    memmove(&(sb)->items[(pos) + (len)],                         \
-            &(sb)->items[(pos)],                                 \
-            (sb)->size - (pos));                                 \
-    memcpy(&(sb)->items[(pos)], (buf), (len));                   \
-                                                                 \
-    (sb)->size += (len);                                         \
-} while (0)
+#define sb_insert_buf da_insert_many
 
 typedef signed char s8;
 typedef unsigned char u8;
