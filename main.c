@@ -219,7 +219,7 @@ u8 utf8_byte_size(char c)
 
 // lines functions
 
-u32 lines_tokenize(lines_t *line_tokens, const sb_t sb)
+u32 lines_tokenize(line_tokens_t *line_tokens, const sb_t sb)
 {
     line_tokens->size = 0;
 

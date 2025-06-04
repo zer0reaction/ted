@@ -91,11 +91,11 @@ typedef struct line_t {
 } line_t;
 
 // TODO change to line_tokens_t
-typedef struct lines_t {
+typedef struct line_tokens_t {
     line_t *items;
     u32 size;
     u32 cap;
-} lines_t;
+} line_tokens_t;
 
 typedef struct sb_t {
     char *items;
@@ -110,7 +110,7 @@ typedef enum buffer_mode_t {
 
 typedef struct buffer_t {
     sb_t data;
-    lines_t line_tokens;
+    line_tokens_t line_tokens;
     buffer_mode_t mode;
 
     u32 cursor;
@@ -130,7 +130,7 @@ u32 update_last_visual_col(buffer_t *b);
 u8 utf8_byte_size(char c);
 
 // lines functions
-u32 lines_tokenize(lines_t *line_tokens, const sb_t sb);
+u32 lines_tokenize(line_tokens_t *line_tokens, const sb_t sb);
 
 // buffer functions
 u32 buffer_from_file(buffer_t *b, const char *path);
