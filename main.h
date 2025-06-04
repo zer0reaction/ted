@@ -57,11 +57,24 @@ do {                                                             \
     (da)->size += (n);                                           \
 } while (0)
 
+#define da_delete_many(da, pos, n)                              \
+do {                                                            \
+    assert((da)->size <= (da)->cap);                            \
+    assert((pos) + (n) <= (da)->size);                          \
+                                                                \
+    memmove(&(da)->items[(pos)],                                \
+            &(da)->items[(pos) + (n)],                          \
+            sizeof(*(da)->items) * ((da)->size - (pos) - (n))); \
+                                                                \
+    (da)->size -= (n);                                          \
+} while (0)
+
 #define lines_free da_free
 #define lines_append da_append
 
 #define sb_free da_free
 #define sb_insert_buf da_insert_many
+#define sb_delete_substr da_delete_many
 
 typedef signed char s8;
 typedef unsigned char u8;
@@ -77,6 +90,7 @@ typedef struct line_t {
     u32 end;
 } line_t;
 
+// TODO change to line_tokens_t
 typedef struct lines_t {
     line_t *items;
     u32 size;
@@ -112,6 +126,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height);
 // utility functions
 u32 get_cursor_row(buffer_t *b);
 u32 update_row_offset(buffer_t *b, u16 height);
+u32 update_last_visual_col(buffer_t *b);
 u8 utf8_byte_size(char c);
 
 // lines functions
@@ -127,5 +142,6 @@ void move_up(buffer_t *b);
 void move_right(buffer_t *b);
 void move_left(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
+void backspace(buffer_t *b);
 
 #endif // MAIN_H_

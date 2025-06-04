@@ -97,6 +97,9 @@ int main(int argc, char **argv)
             case 033:
                 b.mode = NORMAL_MODE;
                 break;
+            case 127: // backspace
+                backspace(&b);
+                break;
             default:
                 insert_char_at_cursor(&b, c);
             }
@@ -120,12 +123,13 @@ void term_move_cursor(u16 row, u16 col)
 void render(buffer_t *b, u16 term_width, u16 term_height)
 {
     printf("\033[?25l"); // hide cursor
+    printf("\033[2J"); // erase screen (bad)
 
     u16 cursor_visual_col = 1;
     u32 cursor_row = update_row_offset(b, term_height);
 
     for (u32 row_i = 0; row_i < term_height; ++row_i) {
-        if (b->row_offset + row_i >= b->data.size) break;
+        if (b->row_offset + row_i >= b->line_tokens.size) break;
 
         line_t line = b->line_tokens.items[b->row_offset + row_i];
         u16 y = 1;
@@ -184,6 +188,20 @@ u32 update_row_offset(buffer_t *b, u16 height)
     }
 
     return absolute_row;
+}
+
+u32 update_last_visual_col(buffer_t *b)
+{
+    u32 cursor_row = get_cursor_row(b);
+    line_t cursor_line = b->line_tokens.items[cursor_row];
+
+    b->last_visual_col = 0;
+    for (u32 i = cursor_line.begin; i < b->cursor; ) {
+        b->last_visual_col++;
+        i += utf8_byte_size(b->data.items[i]);
+    }
+
+    return cursor_row;
 }
 
 u8 utf8_byte_size(char c)
@@ -258,22 +276,22 @@ void move_down(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
-    if (cursor_row + 1 < b->line_tokens.size) {
-        line_t next_line = b->line_tokens.items[cursor_row + 1];
+    if (cursor_row + 1 == b->line_tokens.size) return;
 
-        u32 next_line_visual_len = 0;
-        for (u32 i = next_line.begin; i < next_line.end; ) {
-            next_line_visual_len += 1;
-            i += utf8_byte_size(b->data.items[i]);
-        }
+    line_t next_line = b->line_tokens.items[cursor_row + 1];
 
-        if (b->last_visual_col > next_line_visual_len) {
-            b->cursor = next_line.end;
-        } else {
-            b->cursor = next_line.begin;
-            for (u32 i = 0; i < b->last_visual_col; ++i) {
-                b->cursor += utf8_byte_size(b->data.items[b->cursor]);
-            }
+    u32 next_line_visual_len = 0;
+    for (u32 i = next_line.begin; i < next_line.end; ) {
+        next_line_visual_len += 1;
+        i += utf8_byte_size(b->data.items[i]);
+    }
+
+    if (b->last_visual_col > next_line_visual_len) {
+        b->cursor = next_line.end;
+    } else {
+        b->cursor = next_line.begin;
+        for (u32 i = 0; i < b->last_visual_col; ++i) {
+            b->cursor += utf8_byte_size(b->data.items[b->cursor]);
         }
     }
 }
@@ -282,59 +300,45 @@ void move_up(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
-    if (cursor_row > 0) {
-        line_t next_line = b->line_tokens.items[cursor_row - 1];
+    if (cursor_row == 0) return;
 
-        u32 next_line_visual_len = 0;
-        for (u32 i = next_line.begin; i < next_line.end; ) {
-            next_line_visual_len += 1;
-            i += utf8_byte_size(b->data.items[i]);
-        }
+    line_t next_line = b->line_tokens.items[cursor_row - 1];
 
-        if (b->last_visual_col > next_line_visual_len) {
-            b->cursor = next_line.end;
-        } else {
-            b->cursor = next_line.begin;
-            for (u32 i = 0; i < b->last_visual_col; ++i) {
-                b->cursor += utf8_byte_size(b->data.items[b->cursor]);
-            }
+    u32 next_line_visual_len = 0;
+    for (u32 i = next_line.begin; i < next_line.end; ) {
+        next_line_visual_len += 1;
+        i += utf8_byte_size(b->data.items[i]);
+    }
+
+    if (b->last_visual_col > next_line_visual_len) {
+        b->cursor = next_line.end;
+    } else {
+        b->cursor = next_line.begin;
+        for (u32 i = 0; i < b->last_visual_col; ++i) {
+            b->cursor += utf8_byte_size(b->data.items[b->cursor]);
         }
     }
 }
 
 void move_right(buffer_t *b)
 {
-    if (b->cursor < b->data.size) {
-        b->cursor += utf8_byte_size(b->data.items[b->cursor]);
+    if (b->cursor == b->data.size) return;
 
-        u32 cursor_row = get_cursor_row(b);
-        line_t cursor_line = b->line_tokens.items[cursor_row];
+    b->cursor += utf8_byte_size(b->data.items[b->cursor]);
 
-        b->last_visual_col = 0;
-        for (u32 i = cursor_line.begin; i < b->cursor; ) {
-            b->last_visual_col++;
-            i += utf8_byte_size(b->data.items[i]);
-        }
-    }
+    update_last_visual_col(b);
 }
 
 void move_left(buffer_t *b)
 {
-    if (b->cursor > 0) {
+    if (b->cursor == 0) return;
+
+    b->cursor--;
+    while (utf8_byte_size(b->data.items[b->cursor]) == 0) {
         b->cursor--;
-        while (utf8_byte_size(b->data.items[b->cursor]) == 0) {
-            b->cursor--;
-        }
-
-        u32 cursor_row = get_cursor_row(b);
-        line_t cursor_line = b->line_tokens.items[cursor_row];
-
-        b->last_visual_col = 0;
-        for (u32 i = cursor_line.begin; i < b->cursor; ) {
-            b->last_visual_col++;
-            i += utf8_byte_size(b->data.items[i]);
-        }
     }
+
+    update_last_visual_col(b);
 }
 
 void insert_char_at_cursor(buffer_t *b, char c)
@@ -364,4 +368,20 @@ void insert_char_at_cursor(buffer_t *b, char c)
 
         lines_tokenize(&b->line_tokens, b->data);
     }
+}
+
+void backspace(buffer_t *b)
+{
+    if (b->cursor == 0) return;
+
+    b->cursor--;
+    while (utf8_byte_size(b->data.items[b->cursor]) == 0) {
+        b->cursor--;
+    }
+
+    u8 size = utf8_byte_size(b->data.items[b->cursor]);
+    sb_delete_substr(&b->data, b->cursor, size);
+
+    lines_tokenize(&b->line_tokens, b->data);
+    update_last_visual_col(b);
 }
