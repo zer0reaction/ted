@@ -65,6 +65,14 @@ do {                                                \
     (da)->items[(da)->size - 1] = (item);           \
 } while (0)
 
+#define da_append_many(da, xs, n)                   \
+do {                                                \
+    assert(sizeof(*xs) == sizeof(*(da)->items));    \
+    da_grow(da, n);                                 \
+    memcpy(&(da)->items[(da)->size - (n)], (xs),    \
+           sizeof(*(da)->items) * (n));             \
+} while (0)
+
 #define da_insert_many(da, xs, n, pos)                      \
 do {                                                        \
     assert((pos) <= (da)->size);                            \
@@ -96,6 +104,13 @@ do {                                                            \
 #define sb_free da_free
 #define sb_insert_buf da_insert_many
 #define sb_delete_substr da_delete_many
+
+#define sb_append_cstr(sb, cstr)    \
+do {                                \
+    const char *s = (cstr);         \
+    u32 len = strlen(s);            \
+    da_append_many(sb, s, len);     \
+} while (0)
 
 // #########################################################################
 // Type defenitions
@@ -134,6 +149,7 @@ typedef enum buffer_mode_t {
 
 typedef struct buffer_t {
     sb_t data;
+    sb_t path;
     lines_t line_tokens;
     buffer_mode_t mode;
 
@@ -337,9 +353,9 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
     term_clear(term_width, term_height);
 
     u16 cursor_visual_col = 1;
-    u32 cursor_row = update_row_offset(b, term_height);
+    u32 cursor_row = update_row_offset(b, term_height - 1);
 
-    for (u32 row_i = 0; row_i < term_height; ++row_i) {
+    for (u32 row_i = 0; row_i + 1 < term_height; ++row_i) {
         if (b->row_offset + row_i >= b->line_tokens.size) break;
 
         line_t line = b->line_tokens.items[b->row_offset + row_i];
@@ -363,6 +379,25 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
                 k += utf8_byte_size(b->data.items[k]);
             }
         }
+    }
+
+    char status[MAX_WIDTH] = {0};
+    strncat(status, b->path.items, b->path.size);
+    sprintf(&status[strlen(status)], ":%u:%u",
+            cursor_row + 1, cursor_visual_col);
+
+    utf8_char_t c = {0};
+    u16 col_i = 0;
+
+    for (u16 i = 0; i < strlen(status) && i < MAX_WIDTH;) {
+        u8 size = utf8_byte_size(status[i]);
+
+        c.abs = 0;
+        memcpy(c.arr, &status[i], size);
+
+        term_set_char(c, term_height - 1, col_i);
+        i += size;
+        col_i++;
     }
 
     printf("\033[?25l"); // hide cursor
@@ -473,6 +508,8 @@ u32 buffer_from_file(buffer_t *b, const char *path)
     b->data.cap = file_size;
     fread(b->data.items, 1, file_size, fp);
 
+    sb_append_cstr(&b->path, path);
+
     lines_tokenize(&b->line_tokens, b->data);
 
     fclose(fp);
@@ -482,6 +519,7 @@ u32 buffer_from_file(buffer_t *b, const char *path)
 void buffer_kill(buffer_t *b)
 {
     sb_free(&b->data);
+    sb_free(&b->path);
     lines_free(&b->line_tokens);
     memset(b, 0, sizeof(buffer_t));
 }
