@@ -8,7 +8,13 @@
 #include <locale.h>
 #include <unistd.h>
 
+// #########################################################################
+// Preprocessor stuff
+// #########################################################################
+
 #define DA_INIT_CAP 128
+#define MAX_WIDTH 256
+#define MAX_HEIGHT 256
 
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
@@ -83,6 +89,10 @@ do {                                                            \
 #define sb_insert_buf da_insert_many
 #define sb_delete_substr da_delete_many
 
+// #########################################################################
+// Type defenitions
+// #########################################################################
+
 typedef signed char s8;
 typedef unsigned char u8;
 typedef signed short s16;
@@ -124,30 +134,44 @@ typedef struct buffer_t {
     u32 last_visual_col;
 } buffer_t;
 
-// render functions
+typedef union utf8_char_t {
+    char arr[4];
+    u32 abs;
+} utf8_char_t;
+
+// #########################################################################
+// Function prototypes
+// #########################################################################
+
+void term_set_char(utf8_char_t c, u16 row_i, u16 col_i);
+void term_clear(u16 term_width, u16 term_height);
+void term_display(u16 term_width, u16 term_height);
 void term_move_cursor(u16 row, u16 col);
 void render(buffer_t *b, u16 term_width, u16 term_height);
 
-// utility functions
 u32 get_cursor_row(buffer_t *b);
 u32 update_row_offset(buffer_t *b, u16 height);
 u32 update_last_visual_col(buffer_t *b);
 u8 utf8_byte_size(char c);
 
-// lines functions
 u32 lines_tokenize(lines_t *line_tokens, const sb_t sb);
 
-// buffer functions
 u32 buffer_from_file(buffer_t *b, const char *path);
 void buffer_kill(buffer_t *b);
 
-// editor functions
 void move_down(buffer_t *b);
 void move_up(buffer_t *b);
 void move_right(buffer_t *b);
 void move_left(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
 void backspace(buffer_t *b);
+
+// #########################################################################
+// Main
+// #########################################################################
+
+utf8_char_t display_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
+bool dirty_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
 
 int main(int argc, char **argv)
 {
@@ -197,11 +221,16 @@ int main(int argc, char **argv)
 
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_mode);
 
-    printf("\033[?1049h"); // enable alternative buffer
-
     s16 term_width = tgetnum("co");
     s16 term_height = tgetnum("li");
     assert(term_width != -1 && term_height != -1);
+
+    if (term_width > MAX_WIDTH || term_height > MAX_HEIGHT) {
+        printf("terminal resolution is too high\n");
+        return 1;
+    }
+
+    printf("\033[?1049h"); // enable alternative buffer
 
     bool should_close = false;
     while (!should_close) {
@@ -253,6 +282,40 @@ int main(int argc, char **argv)
 
 // render functions
 
+void term_set_char(utf8_char_t c, u16 row_i, u16 col_i)
+{
+    if (display_buffer[row_i][col_i].abs == c.abs) return;
+
+    display_buffer[row_i][col_i] = c;
+    dirty_buffer[row_i][col_i] = true;
+}
+
+void term_clear(u16 term_width, u16 term_height)
+{
+    for (u16 row_i = 0; row_i < term_height; ++row_i) {
+        for (u16 col_i = 0; col_i < term_width; ++col_i) {
+            term_set_char((utf8_char_t){ .abs = 0 }, row_i, col_i);
+        }
+    }
+}
+
+void term_display(u16 term_width, u16 term_height)
+{
+    for (u16 row_i = 0; row_i < term_height; ++row_i) {
+        for (u16 col_i = 0; col_i < term_width; ++col_i) {
+            if (!dirty_buffer[row_i][col_i]) continue;
+
+            term_move_cursor(row_i + 1, col_i + 1);
+
+            if (display_buffer[row_i][col_i].abs == 0) {
+                putchar(' ');
+            } else {
+                printf("%s", display_buffer[row_i][col_i].arr);
+            }
+        }
+    }
+}
+
 // row and col start with 1
 void term_move_cursor(u16 row, u16 col)
 {
@@ -261,8 +324,7 @@ void term_move_cursor(u16 row, u16 col)
 
 void render(buffer_t *b, u16 term_width, u16 term_height)
 {
-    printf("\033[?25l"); // hide cursor
-    printf("\033[2J"); // erase screen (bad)
+    term_clear(term_width, term_height);
 
     u16 cursor_visual_col = 1;
     u32 cursor_row = update_row_offset(b, term_height);
@@ -271,22 +333,18 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
         if (b->row_offset + row_i >= b->line_tokens.size) break;
 
         line_t line = b->line_tokens.items[b->row_offset + row_i];
-        u16 y = 1;
-
-        term_move_cursor(row_i + 1, 1);
+        u16 col_i = 0;
+        utf8_char_t c = {0};
 
         for (u32 char_i = 0; char_i < line.end - line.begin;) {
             u8 size = utf8_byte_size(b->data.items[line.begin + char_i]);
-            for (u8 i = 0; i < size; ++i) {
-                putchar(b->data.items[line.begin + char_i + i]);
-            }
 
-            y++;
+            c.abs = 0;
+            memcpy(c.arr, &b->data.items[line.begin + char_i], size);
+            term_set_char(c, row_i, col_i);
+
+            col_i++;
             char_i += size;
-        }
-
-        for (; y <= term_width; ++y) {
-            putchar(' ');
         }
 
         if (b->row_offset + row_i == cursor_row) {
@@ -297,7 +355,10 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
         }
     }
 
+    printf("\033[?25l"); // hide cursor
+    term_display(term_width, term_height);
     printf("\033[?25h"); // show cursor
+
     term_move_cursor(cursor_row - b->row_offset + 1, cursor_visual_col);
     fflush(stdout);
 }
