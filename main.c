@@ -280,7 +280,9 @@ int main(int argc, char **argv)
     return 0;
 }
 
-// render functions
+// #########################################################################
+// Render functions
+// #########################################################################
 
 void term_set_char(utf8_char_t c, u16 row_i, u16 col_i)
 {
@@ -363,7 +365,9 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
     fflush(stdout);
 }
 
-// utility functions
+// #########################################################################
+// Utility functions
+// #########################################################################
 
 u32 get_cursor_row(buffer_t *b)
 {
@@ -417,7 +421,9 @@ u8 utf8_byte_size(char c)
     assert(0 && "unreachable");
 }
 
-// lines functions
+// #########################################################################
+// Lines functions
+// #########################################################################
 
 u32 lines_tokenize(lines_t *line_tokens, const sb_t sb)
 {
@@ -439,7 +445,9 @@ u32 lines_tokenize(lines_t *line_tokens, const sb_t sb)
     return line_tokens->size;
 }
 
-// buffer functions
+// #########################################################################
+// Buffer functions
+// #########################################################################
 
 u32 buffer_from_file(buffer_t *b, const char *path)
 {
@@ -470,7 +478,9 @@ void buffer_kill(buffer_t *b)
     memset(b, 0, sizeof(buffer_t));
 }
 
-// editor functions
+// #########################################################################
+// Editor functions
+// #########################################################################
 
 void move_down(buffer_t *b)
 {
