@@ -18,68 +18,76 @@
 
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-#define da_free(da)      \
-do {                     \
-    assert((da)->items); \
-    free((da)->items);   \
-    (da)->items = NULL;  \
-    (da)->size = 0;      \
-    (da)->cap = 0;       \
+#define da_free(da)         \
+do {                        \
+    assert((da)->items);    \
+    free((da)->items);      \
+    (da)->items = NULL;     \
+    (da)->size = 0;         \
+    (da)->cap = 0;          \
 } while (0)
 
-#define da_append(da, item)                                      \
-do {                                                             \
-    assert((da)->size <= (da)->cap);                             \
-    assert(sizeof(item) == sizeof(*(da)->items));                \
-                                                                 \
-    if ((da)->items == NULL) {                                   \
-        (da)->items = realloc((da)->items, 0);                   \
-    }                                                            \
-                                                                 \
-    if ((da)->size + 1 > (da)->cap) {                            \
-        (da)->cap = max(((da)->cap + 1) * 2, DA_INIT_CAP);       \
-        (da)->items = realloc((da)->items,                       \
-                              sizeof(*(da)->items) * (da)->cap); \
-    }                                                            \
-                                                                 \
-    (da)->items[(da)->size] = (item);                            \
-    (da)->size += 1;                                             \
+#define da_grow(da, n)                                              \
+do {                                                                \
+    assert((da)->size <= (da)->cap);                                \
+                                                                    \
+    if ((da)->items == NULL) {                                      \
+        (da)->items = realloc((da)->items, 0);                      \
+    }                                                               \
+                                                                    \
+    if ((da)->size + (n) > (da)->cap) {                             \
+        (da)->cap = max(((da)->cap + (n)) * 2, DA_INIT_CAP);        \
+        (da)->items = realloc((da)->items,                          \
+                              sizeof(*(da)->items) * (da)->cap);    \
+    }                                                               \
+                                                                    \
+    (da)->size += (n);                                              \
 } while (0)
 
-#define da_insert_many(da, xs, n, pos)                           \
-do {                                                             \
-    assert((da)->size <= (da)->cap);                             \
-    assert((pos) <= (da)->size);                                 \
-                                                                 \
-    if ((da)->items == NULL) {                                   \
-        (da)->items = realloc((da)->items, 0);                   \
-    }                                                            \
-                                                                 \
-    if ((da)->size + (n) > (da)->cap) {                          \
-        (da)->cap = max(((da)->cap + (n)) * 2, DA_INIT_CAP);     \
-        (da)->items = realloc((da)->items,                       \
-                              sizeof(*(da)->items) * (da)->cap); \
-    }                                                            \
-                                                                 \
-    memmove(&(da)->items[(pos) + (n)],                           \
-            &(da)->items[(pos)],                                 \
-            sizeof(*(da)->items) * ((da)->size - (pos)));        \
-    memcpy(&(da)->items[(pos)], (xs),                            \
-           sizeof(*(da)->items) * (n));                          \
-                                                                 \
-    (da)->size += (n);                                           \
+#define da_shrink(da, n)                                            \
+do {                                                                \
+    assert((da)->size <= (da)->cap);                                \
+    assert((n) <= (da)->size);                                      \
+                                                                    \
+    if ((da)->size - (n) <= (da)->cap / 4) {                        \
+        (da)->cap = max(((da)->cap - (n)) * 2, DA_INIT_CAP);        \
+        (da)->items = realloc((da)->items,                          \
+                              sizeof(*(da)->items) * (da)->cap);    \
+    }                                                               \
+                                                                    \
+    (da)->size -= (n);                                              \
+} while (0)
+
+#define da_append(da, item)                         \
+do {                                                \
+    assert(sizeof(item) == sizeof(*(da)->items));   \
+    da_grow(da, 1);                                 \
+    (da)->items[(da)->size - 1] = (item);           \
+} while (0)
+
+#define da_insert_many(da, xs, n, pos)                      \
+do {                                                        \
+    assert((pos) <= (da)->size);                            \
+    assert(sizeof(*xs) == sizeof(*(da)->items));            \
+                                                            \
+    da_grow(da, n);                                         \
+                                                            \
+    memmove(&(da)->items[(pos) + (n)],                      \
+            &(da)->items[(pos)],                            \
+            sizeof(*(da)->items) * ((da)->size - (pos)));   \
+    memcpy(&(da)->items[(pos)], (xs),                       \
+           sizeof(*(da)->items) * (n));                     \
 } while (0)
 
 #define da_delete_many(da, pos, n)                              \
 do {                                                            \
-    assert((da)->size <= (da)->cap);                            \
     assert((pos) + (n) <= (da)->size);                          \
                                                                 \
     memmove(&(da)->items[(pos)],                                \
             &(da)->items[(pos) + (n)],                          \
             sizeof(*(da)->items) * ((da)->size - (pos) - (n))); \
                                                                 \
-    (da)->size -= (n);                                          \
+    da_shrink(da, n);                                           \
 } while (0)
 
 #define lines_free da_free
