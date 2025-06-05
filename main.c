@@ -15,6 +15,7 @@
 #define DA_INIT_CAP 128
 #define MAX_WIDTH 256
 #define MAX_HEIGHT 256
+#define TEMP_BUF_SIZE 1024
 
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
@@ -156,6 +157,8 @@ typedef struct buffer_t {
     u32 cursor;
     u32 row_offset;
     u32 last_visual_col;
+
+    bool saved;
 } buffer_t;
 
 typedef union utf8_char_t {
@@ -181,6 +184,7 @@ u8 utf8_byte_size(char c);
 u32 lines_tokenize(lines_t *line_tokens, const sb_t sb);
 
 u32 buffer_from_file(buffer_t *b, const char *path);
+void buffer_save(buffer_t *b);
 void buffer_kill(buffer_t *b);
 
 void move_down(buffer_t *b);
@@ -267,6 +271,9 @@ int main(int argc, char **argv)
             switch (c) {
             case 'q':
                 should_close = true;
+                break;
+            case 's':
+                buffer_save(&b);
                 break;
             case 'i':
                 b.mode = INSERT_MODE;
@@ -381,15 +388,24 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
         }
     }
 
-    char status[MAX_WIDTH] = {0};
+    char status[TEMP_BUF_SIZE] = {0};
+
+    if (!b->saved) {
+        strcat(status, "*");
+    }
+
     strncat(status, b->path.items, b->path.size);
     sprintf(&status[strlen(status)], ":%u:%u",
             cursor_row + 1, cursor_visual_col);
 
+    if (b->mode == INSERT_MODE) {
+        strcat(status, " [insert]");
+    }
+
     utf8_char_t c = {0};
     u16 col_i = 0;
 
-    for (u16 i = 0; i < strlen(status) && i < MAX_WIDTH;) {
+    for (u16 i = 0; i < strlen(status) && i < term_width;) {
         u8 size = utf8_byte_size(status[i]);
 
         c.abs = 0;
@@ -508,12 +524,27 @@ u32 buffer_from_file(buffer_t *b, const char *path)
     b->data.cap = file_size;
     fread(b->data.items, 1, file_size, fp);
 
-    sb_append_cstr(&b->path, path);
-
     lines_tokenize(&b->line_tokens, b->data);
+
+    sb_append_cstr(&b->path, path);
+    b->saved = true;
 
     fclose(fp);
     return b->line_tokens.size;
+}
+
+void buffer_save(buffer_t *b)
+{
+    char path[TEMP_BUF_SIZE] = {0};
+    strncpy(path, b->path.items, b->path.size);
+
+    FILE *fp = fopen(path, "w");
+    assert(fp);
+
+    fwrite(b->data.items, 1, b->data.size, fp);
+
+    fclose(fp);
+    b->saved = true;
 }
 
 void buffer_kill(buffer_t *b)
@@ -622,6 +653,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
             b->last_visual_col += 1;
         }
 
+        b->saved = false;
         lines_tokenize(&b->line_tokens, b->data);
     }
 }
@@ -638,6 +670,7 @@ void backspace(buffer_t *b)
     u8 size = utf8_byte_size(b->data.items[b->cursor]);
     sb_delete_substr(&b->data, b->cursor, size);
 
+    b->saved = false;
     lines_tokenize(&b->line_tokens, b->data);
     update_last_visual_col(b);
 }
