@@ -6,4 +6,4 @@ LDFLAGS='-ltinfo'
 
 set -xe
 
-$CC $CFLAGS -o editor main.c $LDFLAGS
+$CC $CFLAGS -o scuffed main.c $LDFLAGS
