@@ -253,6 +253,7 @@ int main(int argc, char **argv)
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)) {
         printf("ioctl failed\n");
+        return 1;
     }
     u16 term_width = ws.ws_col;
     u16 term_height = ws.ws_row;
