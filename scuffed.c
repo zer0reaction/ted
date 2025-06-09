@@ -356,11 +356,16 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
     u32 cursor_row = update_row_offset(b, term_height - 1);
 
     for (u32 row_i = 0; row_i + 1 < term_height; ++row_i) {
-        if (b->row_offset + row_i >= b->line_tokens.size) break;
+        utf8_char_t c = {0};
+
+        if (b->row_offset + row_i >= b->line_tokens.size) {
+            c.arr[0] = '~';
+            term_set_char(c, row_i, 0);
+            continue;
+        }
 
         line_t line = b->line_tokens.items[b->row_offset + row_i];
         u16 col_i = 0;
-        utf8_char_t c = {0};
 
         for (u32 char_i = 0; char_i < line.end - line.begin;) {
             u8 size = utf8_byte_size(b->data.items[line.begin + char_i]);
