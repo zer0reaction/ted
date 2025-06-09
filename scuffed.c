@@ -29,7 +29,7 @@ void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
 u32 lines_tokenize(lines_t *line_tokens, const sb_t sb);
 
 // buffer functions
-u32 buffer_from_file(buffer_t *b, const char *path);
+u32 buffer_create_from_file(buffer_t *b, const char *path);
 void buffer_save(buffer_t *b);
 void buffer_kill(buffer_t *b);
 
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     }
 
     buffer_t b = {0};
-    if (buffer_from_file(&b, argv[1]) == 0) {
+    if (buffer_create_from_file(&b, argv[1]) == 0) {
         printf("no file found\n");
         return 1;
     }
@@ -382,7 +382,7 @@ u32 lines_tokenize(lines_t *line_tokens, const sb_t sb)
 // Buffer functions
 // #########################################################################
 
-u32 buffer_from_file(buffer_t *b, const char *path)
+u32 buffer_create_from_file(buffer_t *b, const char *path)
 {
     memset(b, 0, sizeof(buffer_t));
 
