@@ -171,27 +171,35 @@ typedef union utf8_char_t {
 // Function prototypes
 // #########################################################################
 
+// terminal functions
 void term_set_char(utf8_char_t c, u16 row_i, u16 col_i);
 void term_clear(u16 term_width, u16 term_height);
 void term_display(u16 term_width, u16 term_height);
 void term_move_cursor(u16 row, u16 col);
 void render(buffer_t *b, u16 term_width, u16 term_height);
 
+// helper functions
 u32 get_cursor_row(buffer_t *b);
 u32 update_row_offset(buffer_t *b, u16 height);
 u32 update_last_visual_col(buffer_t *b);
 u8 utf8_byte_size(char c);
+void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
 
+// lines functions
 u32 lines_tokenize(lines_t *line_tokens, const sb_t sb);
 
+// buffer functions
 u32 buffer_from_file(buffer_t *b, const char *path);
 void buffer_save(buffer_t *b);
 void buffer_kill(buffer_t *b);
 
+// editor functions
 void move_down(buffer_t *b);
 void move_up(buffer_t *b);
 void move_right(buffer_t *b);
 void move_left(buffer_t *b);
+void move_down_page(buffer_t *b, u32 term_height);
+void move_up_page(buffer_t *b, u32 term_height);
 void insert_char_at_cursor(buffer_t *b, char c);
 void backspace(buffer_t *b);
 
@@ -239,6 +247,7 @@ int main(int argc, char **argv)
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_mode);
 
     // TODO handle window resize
+    //      and maybe move it to buffer struct?
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)) {
         printf("ioctl failed\n");
@@ -282,6 +291,12 @@ int main(int argc, char **argv)
                 break;
             case 'h':
                 move_left(&b);
+                break;
+            case 'n':
+                move_down_page(&b, term_height);
+                break;
+            case 'p':
+                move_up_page(&b, term_height);
                 break;
             }
         } else if (b.mode == INSERT_MODE) {
@@ -331,6 +346,7 @@ void term_display(u16 term_width, u16 term_height)
         for (u16 col_i = 0; col_i < term_width; ++col_i) {
             if (!dirty_buffer[row_i][col_i]) continue;
 
+            // TODO DSA mode?
             term_move_cursor(row_i + 1, col_i + 1);
 
             if (display_buffer[row_i][col_i].abs == 0) {
@@ -478,6 +494,24 @@ u8 utf8_byte_size(char c)
     assert(0 && "unreachable");
 }
 
+void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
+{
+    u32 next_line_visual_len = 0;
+    for (u32 i = next_line.begin; i < next_line.end; ) {
+        next_line_visual_len += 1;
+        i += utf8_byte_size(b->data.items[i]);
+    }
+
+    if (b->last_visual_col > next_line_visual_len) {
+        b->cursor = next_line.end;
+    } else {
+        b->cursor = next_line.begin;
+        for (u32 i = 0; i < b->last_visual_col; ++i) {
+            b->cursor += utf8_byte_size(b->data.items[b->cursor]);
+        }
+    }
+}
+
 // #########################################################################
 // Lines functions
 // #########################################################################
@@ -560,49 +594,19 @@ void buffer_kill(buffer_t *b)
 void move_down(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
-
     if (cursor_row + 1 == b->line_tokens.size) return;
 
     line_t next_line = b->line_tokens.items[cursor_row + 1];
-
-    u32 next_line_visual_len = 0;
-    for (u32 i = next_line.begin; i < next_line.end; ) {
-        next_line_visual_len += 1;
-        i += utf8_byte_size(b->data.items[i]);
-    }
-
-    if (b->last_visual_col > next_line_visual_len) {
-        b->cursor = next_line.end;
-    } else {
-        b->cursor = next_line.begin;
-        for (u32 i = 0; i < b->last_visual_col; ++i) {
-            b->cursor += utf8_byte_size(b->data.items[b->cursor]);
-        }
-    }
+    set_cursor_col_after_vertical_move(b, next_line);
 }
 
 void move_up(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
-
     if (cursor_row == 0) return;
 
     line_t next_line = b->line_tokens.items[cursor_row - 1];
-
-    u32 next_line_visual_len = 0;
-    for (u32 i = next_line.begin; i < next_line.end; ) {
-        next_line_visual_len += 1;
-        i += utf8_byte_size(b->data.items[i]);
-    }
-
-    if (b->last_visual_col > next_line_visual_len) {
-        b->cursor = next_line.end;
-    } else {
-        b->cursor = next_line.begin;
-        for (u32 i = 0; i < b->last_visual_col; ++i) {
-            b->cursor += utf8_byte_size(b->data.items[b->cursor]);
-        }
-    }
+    set_cursor_col_after_vertical_move(b, next_line);
 }
 
 void move_right(buffer_t *b)
@@ -610,7 +614,6 @@ void move_right(buffer_t *b)
     if (b->cursor == b->data.size) return;
 
     b->cursor += utf8_byte_size(b->data.items[b->cursor]);
-
     update_last_visual_col(b);
 }
 
@@ -624,6 +627,34 @@ void move_left(buffer_t *b)
     }
 
     update_last_visual_col(b);
+}
+
+void move_down_page(buffer_t *b, u32 term_height)
+{
+    u32 cursor_row = get_cursor_row(b);
+
+    line_t next_line = {0};
+    if (cursor_row + term_height / 2 >= b->line_tokens.size) {
+        next_line = b->line_tokens.items[b->line_tokens.size - 1];
+    } else {
+        next_line = b->line_tokens.items[cursor_row + term_height / 2];
+    }
+
+    set_cursor_col_after_vertical_move(b, next_line);
+}
+
+void move_up_page(buffer_t *b, u32 term_height)
+{
+    u32 cursor_row = get_cursor_row(b);
+
+    line_t next_line = {0};
+    if (cursor_row < term_height / 2) {
+        next_line = b->line_tokens.items[0];
+    } else {
+        next_line = b->line_tokens.items[cursor_row - term_height / 2];
+    }
+
+    set_cursor_col_after_vertical_move(b, next_line);
 }
 
 void insert_char_at_cursor(buffer_t *b, char c)
