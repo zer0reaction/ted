@@ -52,7 +52,7 @@ do {                                                                \
     assert((n) <= (da)->size);                                      \
                                                                     \
     if ((da)->size - (n) <= (da)->cap / 4) {                        \
-        (da)->cap = max(((da)->cap - (n)) * 2, DA_INIT_CAP);        \
+        (da)->cap = max(((da)->size - (n)) * 2, DA_INIT_CAP);       \
         (da)->items = realloc((da)->items,                          \
                               sizeof(*(da)->items) * (da)->cap);    \
     }                                                               \
