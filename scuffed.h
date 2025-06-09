@@ -1,3 +1,5 @@
+#define INDENT_SPACES 4
+
 #define DA_INIT_CAP 128
 #define MAX_WIDTH 256
 #define MAX_HEIGHT 256

@@ -42,6 +42,7 @@ void move_down_page(buffer_t *b);
 void move_up_page(buffer_t *b);
 void center_cursor_line(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
+void insert_indent_spaces_at_cursor(buffer_t *b);
 void backspace(buffer_t *b);
 
 utf8_char_t display_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
@@ -148,6 +149,9 @@ int main(int argc, char **argv)
                 break;
             case 127: // backspace
                 backspace(&b);
+                break;
+            case '\t':
+                insert_indent_spaces_at_cursor(&b);
                 break;
             default:
                 insert_char_at_cursor(&b, c);
@@ -538,6 +542,17 @@ void insert_char_at_cursor(buffer_t *b, char c)
         b->saved = false;
         lines_tokenize(&b->line_tokens, b->data);
     }
+}
+
+void insert_indent_spaces_at_cursor(buffer_t *b)
+{
+    const char buf[9] = "        "; // 8 spaces max
+    sb_insert_buf(&b->data, buf, INDENT_SPACES, b->cursor);
+    b->cursor += INDENT_SPACES;
+
+    lines_tokenize(&b->line_tokens, b->data);
+    update_last_visual_col(b);
+    b->saved = false;
 }
 
 void backspace(buffer_t *b)
