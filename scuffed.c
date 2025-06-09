@@ -42,6 +42,8 @@ void move_down_page(buffer_t *b);
 void move_up_page(buffer_t *b);
 void move_line_first_char(buffer_t *b);
 void move_line_end(buffer_t *b);
+void move_top(buffer_t *b);
+void move_bottom(buffer_t *b);
 void center_cursor_line(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
 void insert_indent_spaces_at_cursor(buffer_t *b);
@@ -150,6 +152,12 @@ int main(int argc, char **argv)
                 break;
             case 'f':
                 center_cursor_line(&b);
+                break;
+            case 'g':
+                move_top(&b);
+                break;
+            case 'G':
+                move_bottom(&b);
                 break;
             }
         } else if (b.mode == INSERT_MODE) {
@@ -530,6 +538,20 @@ void move_line_end(buffer_t *b)
 
     b->cursor = cursor_line.end;
 
+    update_last_visual_col(b);
+}
+
+void move_top(buffer_t *b)
+{
+    b->cursor = 0;
+    update_last_visual_col(b);
+}
+
+void move_bottom(buffer_t *b)
+{
+    SC_ASSERT(b->line_tokens.size > 0);
+    line_t bottom_line = b->line_tokens.items[b->line_tokens.size - 1];
+    b->cursor = bottom_line.begin;
     update_last_visual_col(b);
 }
 
