@@ -146,6 +146,9 @@ typedef struct buffer_t {
     u32 row_offset;
     u32 last_visual_col;
 
+    u16 contents_width;
+    u16 contents_height;
+
     bool saved;
 } buffer_t;
 

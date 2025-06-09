@@ -20,7 +20,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height);
 
 // helper functions
 u32 get_cursor_row(buffer_t *b);
-u32 update_row_offset(buffer_t *b, u16 height);
+u32 update_row_offset(buffer_t *b);
 u32 update_last_visual_col(buffer_t *b);
 u8 utf8_byte_size(char c);
 void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
@@ -38,8 +38,8 @@ void move_down(buffer_t *b);
 void move_up(buffer_t *b);
 void move_right(buffer_t *b);
 void move_left(buffer_t *b);
-void move_down_page(buffer_t *b, u32 term_height);
-void move_up_page(buffer_t *b, u32 term_height);
+void move_down_page(buffer_t *b);
+void move_up_page(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
 void backspace(buffer_t *b);
 
@@ -83,7 +83,6 @@ int main(int argc, char **argv)
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_mode);
 
     // TODO handle window resize
-    //      and maybe move it to buffer struct?
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)) {
         printf("ioctl failed\n");
@@ -91,6 +90,8 @@ int main(int argc, char **argv)
     }
     u16 term_width = ws.ws_col;
     u16 term_height = ws.ws_row;
+    b.contents_width = term_width;
+    b.contents_height = term_height - 1;
 
     if (term_width > MAX_WIDTH || term_height > MAX_HEIGHT) {
         printf("terminal resolution is too high\n");
@@ -130,10 +131,10 @@ int main(int argc, char **argv)
                 move_left(&b);
                 break;
             case 'n':
-                move_down_page(&b, term_height);
+                move_down_page(&b);
                 break;
             case 'p':
-                move_up_page(&b, term_height);
+                move_up_page(&b);
                 break;
             }
         } else if (b.mode == INSERT_MODE) {
@@ -206,7 +207,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
     term_clear(term_width, term_height);
 
     u16 cursor_visual_col = 1;
-    u32 cursor_row = update_row_offset(b, term_height - 1);
+    u32 cursor_row = update_row_offset(b);
 
     for (u32 row_i = 0; row_i + 1 < term_height; ++row_i) {
         utf8_char_t c = {0};
@@ -290,15 +291,15 @@ u32 get_cursor_row(buffer_t *b)
     SC_ASSERT(0 && "unreachable");
 }
 
-u32 update_row_offset(buffer_t *b, u16 height)
+u32 update_row_offset(buffer_t *b)
 {
     s32 absolute_row = get_cursor_row(b);
     s32 relative_row = absolute_row - b->row_offset;
 
     if (relative_row < 0) {
         b->row_offset += relative_row;
-    } else if (relative_row > height - 1) {
-        b->row_offset += relative_row - (height - 1);
+    } else if (relative_row + 1 > b->contents_height) {
+        b->row_offset += relative_row - (b->contents_height - 1);
     }
 
     return absolute_row;
@@ -466,29 +467,29 @@ void move_left(buffer_t *b)
     update_last_visual_col(b);
 }
 
-void move_down_page(buffer_t *b, u32 term_height)
+void move_down_page(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
     line_t next_line = {0};
-    if (cursor_row + term_height / 2 >= b->line_tokens.size) {
+    if (cursor_row + b->contents_height / 2 >= b->line_tokens.size) {
         next_line = b->line_tokens.items[b->line_tokens.size - 1];
     } else {
-        next_line = b->line_tokens.items[cursor_row + term_height / 2];
+        next_line = b->line_tokens.items[cursor_row + b->contents_height / 2];
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
-void move_up_page(buffer_t *b, u32 term_height)
+void move_up_page(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
     line_t next_line = {0};
-    if (cursor_row < term_height / 2) {
+    if (cursor_row < b->contents_height / 2) {
         next_line = b->line_tokens.items[0];
     } else {
-        next_line = b->line_tokens.items[cursor_row - term_height / 2];
+        next_line = b->line_tokens.items[cursor_row - b->contents_height / 2];
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
