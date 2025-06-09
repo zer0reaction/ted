@@ -134,9 +134,11 @@ int main(int argc, char **argv)
                 break;
             case 'n':
                 move_down_page(&b);
+                center_cursor_line(&b);
                 break;
             case 'p':
                 move_up_page(&b);
+                center_cursor_line(&b);
                 break;
             case 'f':
                 center_cursor_line(&b);
