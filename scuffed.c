@@ -40,6 +40,8 @@ void move_right(buffer_t *b);
 void move_left(buffer_t *b);
 void move_down_page(buffer_t *b);
 void move_up_page(buffer_t *b);
+void move_line_first_char(buffer_t *b);
+void move_line_end(buffer_t *b);
 void center_cursor_line(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
 void insert_indent_spaces_at_cursor(buffer_t *b);
@@ -139,6 +141,12 @@ int main(int argc, char **argv)
             case 'p':
                 move_up_page(&b);
                 center_cursor_line(&b);
+                break;
+            case '0':
+                move_line_first_char(&b);
+                break;
+            case '$':
+                move_line_end(&b);
                 break;
             case 'f':
                 center_cursor_line(&b);
@@ -503,6 +511,26 @@ void move_up_page(buffer_t *b)
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
+}
+
+void move_line_first_char(buffer_t *b)
+{
+    u32 cursor_row = get_cursor_row(b);
+    line_t cursor_line = b->line_tokens.items[cursor_row];
+
+    b->cursor = cursor_line.begin;
+
+    b->last_visual_col = 0;
+}
+
+void move_line_end(buffer_t *b)
+{
+    u32 cursor_row = get_cursor_row(b);
+    line_t cursor_line = b->line_tokens.items[cursor_row];
+
+    b->cursor = cursor_line.end;
+
+    update_last_visual_col(b);
 }
 
 void center_cursor_line(buffer_t *b)
