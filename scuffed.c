@@ -40,6 +40,7 @@ void move_right(buffer_t *b);
 void move_left(buffer_t *b);
 void move_down_page(buffer_t *b);
 void move_up_page(buffer_t *b);
+void center_cursor_line(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
 void backspace(buffer_t *b);
 
@@ -135,6 +136,9 @@ int main(int argc, char **argv)
                 break;
             case 'p':
                 move_up_page(&b);
+                break;
+            case 'f':
+                center_cursor_line(&b);
                 break;
             }
         } else if (b.mode == INSERT_MODE) {
@@ -493,6 +497,17 @@ void move_up_page(buffer_t *b)
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
+}
+
+void center_cursor_line(buffer_t *b)
+{
+    u32 cursor_row = get_cursor_row(b);
+
+    if (cursor_row <= b->contents_height / 2) {
+        b->row_offset = 0;
+    } else {
+        b->row_offset = cursor_row - b->contents_height / 2;
+    }
 }
 
 void insert_char_at_cursor(buffer_t *b, char c)
