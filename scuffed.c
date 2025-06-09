@@ -1,12 +1,13 @@
-#include <term.h>
-#include <termios.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 #include <locale.h>
+
 #include <unistd.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 
 // #########################################################################
 // Preprocessor stuff
@@ -225,18 +226,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    char *term = getenv("TERM");
-    if (!term) {
-        printf("TERM environment variable not found\n");
-        return 1;
-    }
-
-    int ret = tgetent(NULL, term);
-    if (ret != 1) {
-        printf("terminal is not in terminfo database\n");
-        return 2;
-    }
-
     struct termios original_settings = {0};
     assert(tcgetattr(STDIN_FILENO, &original_settings) != -1);
 
@@ -249,9 +238,11 @@ int main(int argc, char **argv)
 
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_mode);
 
-    s16 term_width = tgetnum("co");
-    s16 term_height = tgetnum("li");
-    assert(term_width != -1 && term_height != -1);
+    // TODO handle window resize
+    struct winsize ws;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+    u16 term_width = ws.ws_col;
+    u16 term_height = ws.ws_row;
 
     if (term_width > MAX_WIDTH || term_height > MAX_HEIGHT) {
         printf("terminal resolution is too high\n");
