@@ -240,7 +240,9 @@ int main(int argc, char **argv)
 
     // TODO handle window resize
     struct winsize ws;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)) {
+        printf("ioctl failed\n");
+    }
     u16 term_width = ws.ws_col;
     u16 term_height = ws.ws_row;
 
