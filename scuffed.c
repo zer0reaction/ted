@@ -18,11 +18,13 @@
 #define MAX_HEIGHT 256
 #define TEMP_BUF_SIZE 1024
 
+#define SC_ASSERT assert
+
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
 #define da_free(da)         \
 do {                        \
-    assert((da)->items);    \
+    SC_ASSERT((da)->items); \
     free((da)->items);      \
     (da)->items = NULL;     \
     (da)->size = 0;         \
@@ -31,7 +33,7 @@ do {                        \
 
 #define da_grow(da, n)                                              \
 do {                                                                \
-    assert((da)->size <= (da)->cap);                                \
+    SC_ASSERT((da)->size <= (da)->cap);                             \
                                                                     \
     if ((da)->items == NULL) {                                      \
         (da)->items = realloc((da)->items, 0);                      \
@@ -48,8 +50,8 @@ do {                                                                \
 
 #define da_shrink(da, n)                                            \
 do {                                                                \
-    assert((da)->size <= (da)->cap);                                \
-    assert((n) <= (da)->size);                                      \
+    SC_ASSERT((da)->size <= (da)->cap);                             \
+    SC_ASSERT((n) <= (da)->size);                                   \
                                                                     \
     if ((da)->size - (n) <= (da)->cap / 4) {                        \
         (da)->cap = max(((da)->size - (n)) * 2, DA_INIT_CAP);       \
@@ -60,16 +62,16 @@ do {                                                                \
     (da)->size -= (n);                                              \
 } while (0)
 
-#define da_append(da, item)                         \
-do {                                                \
-    assert(sizeof(item) == sizeof(*(da)->items));   \
-    da_grow(da, 1);                                 \
-    (da)->items[(da)->size - 1] = (item);           \
+#define da_append(da, item)                             \
+do {                                                    \
+    SC_ASSERT(sizeof(item) == sizeof(*(da)->items));    \
+    da_grow(da, 1);                                     \
+    (da)->items[(da)->size - 1] = (item);               \
 } while (0)
 
 #define da_append_many(da, xs, n)                   \
 do {                                                \
-    assert(sizeof(*xs) == sizeof(*(da)->items));    \
+    SC_ASSERT(sizeof(*xs) == sizeof(*(da)->items)); \
     da_grow(da, n);                                 \
     memcpy(&(da)->items[(da)->size - (n)], (xs),    \
            sizeof(*(da)->items) * (n));             \
@@ -77,8 +79,8 @@ do {                                                \
 
 #define da_insert_many(da, xs, n, pos)                      \
 do {                                                        \
-    assert((pos) <= (da)->size);                            \
-    assert(sizeof(*xs) == sizeof(*(da)->items));            \
+    SC_ASSERT((pos) <= (da)->size);                         \
+    SC_ASSERT(sizeof(*xs) == sizeof(*(da)->items));         \
                                                             \
     da_grow(da, n);                                         \
                                                             \
@@ -91,7 +93,7 @@ do {                                                        \
 
 #define da_delete_many(da, pos, n)                              \
 do {                                                            \
-    assert((pos) + (n) <= (da)->size);                          \
+    SC_ASSERT((pos) + (n) <= (da)->size);                       \
                                                                 \
     memmove(&(da)->items[(pos)],                                \
             &(da)->items[(pos) + (n)],                          \
@@ -212,14 +214,14 @@ bool dirty_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
 
 int main(int argc, char **argv)
 {
-    assert(sizeof(u8) == 1);
-    assert(sizeof(s8) == 1);
-    assert(sizeof(u16) == 2);
-    assert(sizeof(s16) == 2);
-    assert(sizeof(u32) == 4);
-    assert(sizeof(s32) == 4);
-    assert(sizeof(u64) == 8);
-    assert(sizeof(s64) == 8);
+    SC_ASSERT(sizeof(u8) == 1);
+    SC_ASSERT(sizeof(s8) == 1);
+    SC_ASSERT(sizeof(u16) == 2);
+    SC_ASSERT(sizeof(s16) == 2);
+    SC_ASSERT(sizeof(u32) == 4);
+    SC_ASSERT(sizeof(s32) == 4);
+    SC_ASSERT(sizeof(u64) == 8);
+    SC_ASSERT(sizeof(s64) == 8);
 
     setlocale(LC_ALL, "en_US.utf-8");
 
@@ -235,7 +237,7 @@ int main(int argc, char **argv)
     }
 
     struct termios original_settings = {0};
-    assert(tcgetattr(STDIN_FILENO, &original_settings) != -1);
+    SC_ASSERT(tcgetattr(STDIN_FILENO, &original_settings) != -1);
 
     struct termios raw_mode = original_settings;
     raw_mode.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
@@ -450,7 +452,7 @@ u32 get_cursor_row(buffer_t *b)
             return i;
         }
     }
-    assert(0 && "unreachable");
+    SC_ASSERT(0 && "unreachable");
 }
 
 u32 update_row_offset(buffer_t *b, u16 height)
@@ -491,7 +493,7 @@ u8 utf8_byte_size(char c)
     else if (byte >= 224 && byte <= 239) return 3;
     else if (byte >= 240 && byte <= 247) return 4;
 
-    assert(0 && "unreachable");
+    SC_ASSERT(0 && "unreachable");
 }
 
 void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
@@ -571,7 +573,7 @@ void buffer_save(buffer_t *b)
     strncpy(path, b->path.items, b->path.size);
 
     FILE *fp = fopen(path, "w");
-    assert(fp);
+    SC_ASSERT(fp);
 
     fwrite(b->data.items, 1, b->data.size, fp);
 
