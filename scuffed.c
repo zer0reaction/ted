@@ -41,6 +41,7 @@ void move_left(buffer_t *b);
 void move_down_page(buffer_t *b);
 void move_up_page(buffer_t *b);
 void move_line_first_char(buffer_t *b);
+void move_line_begin(buffer_t *b);
 void move_line_end(buffer_t *b);
 void move_top(buffer_t *b);
 void move_bottom(buffer_t *b);
@@ -115,12 +116,15 @@ int main(int argc, char **argv)
 
         if (b.mode == NORMAL_MODE) {
             switch (c) {
+            // basic commands
             case 'q':
                 should_close = true;
                 break;
             case 's':
                 buffer_save(&b);
                 break;
+
+            // enterning insert mode
             case 'i':
                 b.mode = INSERT_MODE;
                 break;
@@ -128,6 +132,12 @@ int main(int argc, char **argv)
                 move_line_end(&b);
                 b.mode = INSERT_MODE;
                 break;
+            case 'I':
+                move_line_begin(&b);
+                b.mode = INSERT_MODE;
+                break;
+
+            // movement
             case 'j':
                 move_down(&b);
                 break;
@@ -150,6 +160,9 @@ int main(int argc, char **argv)
                 break;
             case '0':
                 move_line_first_char(&b);
+                break;
+            case '^':
+                move_line_begin(&b);
                 break;
             case '$':
                 move_line_end(&b);
@@ -533,6 +546,19 @@ void move_line_first_char(buffer_t *b)
     b->cursor = cursor_line.begin;
 
     b->last_visual_col = 0;
+}
+
+void move_line_begin(buffer_t *b)
+{
+    u32 cursor_row = get_cursor_row(b);
+    line_t cursor_line = b->line_tokens.items[cursor_row];
+
+    b->cursor = cursor_line.begin;
+    while (b->data.items[b->cursor] == ' ') {
+        b->cursor += 1;
+    }
+
+    update_last_visual_col(b);
 }
 
 void move_line_end(buffer_t *b)
