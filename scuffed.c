@@ -124,6 +124,10 @@ int main(int argc, char **argv)
             case 'i':
                 b.mode = INSERT_MODE;
                 break;
+            case 'A':
+                move_line_end(&b);
+                b.mode = INSERT_MODE;
+                break;
             case 'j':
                 move_down(&b);
                 break;
