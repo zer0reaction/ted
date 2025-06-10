@@ -210,14 +210,14 @@ void term_display(u16 term_width, u16 term_height)
         for (u16 col_i = 0; col_i < term_width; ++col_i) {
             if (!dirty_buffer[row_i][col_i]) continue;
 
-            // TODO DSA mode?
             term_move_cursor(row_i + 1, col_i + 1);
 
-            if (display_buffer[row_i][col_i].abs == 0) {
+            if (display_buffer[row_i][col_i].abs == 0)
                 putchar(' ');
-            } else {
+            else
                 printf("%s", display_buffer[row_i][col_i].arr);
-            }
+
+            dirty_buffer[row_i][col_i] = false;
         }
     }
 }
