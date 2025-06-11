@@ -7,6 +7,14 @@
 
 #define SC_ASSERT assert
 
+#define term_set_char(c, row_i, col_i)              \
+if (display_buffer[row_i][col_i].abs != (c).abs) {  \
+    display_buffer[row_i][col_i] = c;               \
+    dirty_buffer[row_i][col_i] = true;              \
+}
+
+#define term_move_cursor(row, col) printf("\033[%d;%dH", row, col)
+
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
 #define da_free(da)         \
@@ -155,6 +163,6 @@ typedef struct buffer_t {
 } buffer_t;
 
 typedef union utf8_char_t {
-    char arr[4];
+    char arr[5];
     u32 abs;
 } utf8_char_t;

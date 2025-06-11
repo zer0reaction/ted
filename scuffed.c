@@ -12,10 +12,8 @@
 #include "scuffed.h"
 
 // terminal functions
-void term_set_char(utf8_char_t c, u16 row_i, u16 col_i);
 void term_clear(u16 term_width, u16 term_height);
 void term_display(u16 term_width, u16 term_height);
-void term_move_cursor(u16 row, u16 col);
 void render(buffer_t *b, u16 term_width, u16 term_height);
 
 // helper functions
@@ -204,14 +202,6 @@ int main(int argc, char **argv)
 // Render functions
 // #########################################################################
 
-void term_set_char(utf8_char_t c, u16 row_i, u16 col_i)
-{
-    if (display_buffer[row_i][col_i].abs == c.abs) return;
-
-    display_buffer[row_i][col_i] = c;
-    dirty_buffer[row_i][col_i] = true;
-}
-
 void term_clear(u16 term_width, u16 term_height)
 {
     for (u16 row_i = 0; row_i < term_height; ++row_i) {
@@ -223,11 +213,20 @@ void term_clear(u16 term_width, u16 term_height)
 
 void term_display(u16 term_width, u16 term_height)
 {
+    u16 row = 1;
+
     for (u16 row_i = 0; row_i < term_height; ++row_i) {
+        u16 col = 1;
+        term_move_cursor(row, col);
+
         for (u16 col_i = 0; col_i < term_width; ++col_i) {
             if (!dirty_buffer[row_i][col_i]) continue;
 
-            term_move_cursor(row_i + 1, col_i + 1);
+            if (row != row_i + 1 || col != col_i + 1) {
+                term_move_cursor(row_i + 1, col_i + 1);
+                row = row_i + 1;
+                col = col_i + 1;
+            }
 
             if (display_buffer[row_i][col_i].abs == 0)
                 putchar(' ');
@@ -235,14 +234,10 @@ void term_display(u16 term_width, u16 term_height)
                 printf("%s", display_buffer[row_i][col_i].arr);
 
             dirty_buffer[row_i][col_i] = false;
+            col++;
         }
+        row++;
     }
-}
-
-// row and col start with 1
-void term_move_cursor(u16 row, u16 col)
-{
-    printf("\033[%d;%dH", row, col);
 }
 
 void render(buffer_t *b, u16 term_width, u16 term_height)
@@ -252,10 +247,11 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
     u16 cursor_visual_col = 1;
     u32 cursor_row = update_row_offset(b);
 
-    for (u32 row_i = 0; row_i + 1 < term_height; ++row_i) {
-        utf8_char_t c = {0};
+    utf8_char_t c = {0};
 
+    for (u32 row_i = 0; row_i + 1 < term_height; ++row_i) {
         if (b->row_offset + row_i >= b->line_tokens.size) {
+            c.abs = 0;
             c.arr[0] = '~';
             term_set_char(c, row_i, 0);
             continue;
@@ -297,7 +293,6 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
         strcat(status, " [insert]");
     }
 
-    utf8_char_t c = {0};
     u16 col_i = 0;
 
     for (u16 i = 0; i < strlen(status) && i < term_width;) {
