@@ -103,7 +103,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("\033[?1049h"); // enable alternative buffer
+    memset(dirty_buffer, 1, MAX_WIDTH * MAX_HEIGHT);
 
     bool should_close = false;
     while (!should_close) {
@@ -194,7 +194,8 @@ int main(int argc, char **argv)
 
     buffer_kill(&b);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_settings);
-    printf("\033[?1049l"); // disable alternative buffer
+    term_move_cursor(term_height, 1);
+    printf("\033[2K"); // erase entire line
     return 0;
 }
 
