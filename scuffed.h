@@ -7,6 +7,8 @@
 
 #define SC_ASSERT assert
 
+#define utf8_byte_size(c) (SC_ASSERT((u8)(c) <= 247), utf8_cache[(u8)(c)])
+
 #define term_set_char(c, row_i, col_i)              \
 if (display_buffer[row_i][col_i].abs != (c).abs) {  \
     display_buffer[row_i][col_i] = c;               \
