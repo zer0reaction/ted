@@ -20,6 +20,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height);
 u32 get_cursor_row(buffer_t *b);
 u32 update_row_offset(buffer_t *b);
 u32 update_last_visual_col(buffer_t *b);
+void cache_utf8_byte_size(void);
 u8 utf8_byte_size(char c);
 void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
 
@@ -48,6 +49,7 @@ void insert_char_at_cursor(buffer_t *b, char c);
 void insert_indent_spaces_at_cursor(buffer_t *b);
 void backspace(buffer_t *b);
 
+u8 utf8_cache[256] = {0};
 utf8_char_t display_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
 bool dirty_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
 
@@ -74,6 +76,8 @@ int main(int argc, char **argv)
         printf("no file found\n");
         return 1;
     }
+
+    cache_utf8_byte_size();
 
     struct termios original_settings = {0};
     SC_ASSERT(tcgetattr(STDIN_FILENO, &original_settings) != -1);
@@ -262,7 +266,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
         u16 col_i = 0;
 
         for (u32 char_i = 0; char_i < line.end - line.begin;) {
-            u8 size = utf8_byte_size(b->data.items[line.begin + char_i]);
+            u8 size = utf8_cache[b->data.items[line.begin + char_i]];
 
             c.abs = 0;
             memcpy(c.arr, &b->data.items[line.begin + char_i], size);
@@ -275,7 +279,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
         if (b->row_offset + row_i == cursor_row) {
             for (u32 k = line.begin; k < b->cursor;) {
                 cursor_visual_col++;
-                k += utf8_byte_size(b->data.items[k]);
+                k += utf8_cache[b->data.items[k]];
             }
         }
     }
@@ -297,7 +301,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
     u16 col_i = 0;
 
     for (u16 i = 0; i < strlen(status) && i < term_width;) {
-        u8 size = utf8_byte_size(status[i]);
+        u8 size = utf8_cache[status[i]];
 
         c.abs = 0;
         memcpy(c.arr, &status[i], size);
@@ -352,10 +356,17 @@ u32 update_last_visual_col(buffer_t *b)
     b->last_visual_col = 0;
     for (u32 i = cursor_line.begin; i < b->cursor; ) {
         b->last_visual_col++;
-        i += utf8_byte_size(b->data.items[i]);
+        i += utf8_cache[b->data.items[i]];
     }
 
     return cursor_row;
+}
+
+void cache_utf8_byte_size(void)
+{
+    for (u32 i = 0; i < 256; ++i) {
+        utf8_cache[i] = utf8_byte_size((char)i);
+    }
 }
 
 u8 utf8_byte_size(char c)
@@ -366,9 +377,7 @@ u8 utf8_byte_size(char c)
     else if (byte >= 128 && byte <= 191) return 0;
     else if (byte >= 192 && byte <= 223) return 2;
     else if (byte >= 224 && byte <= 239) return 3;
-    else if (byte >= 240 && byte <= 247) return 4;
-
-    SC_ASSERT(0 && "unreachable");
+    else if (byte >= 240) return 4;
 }
 
 void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
@@ -376,7 +385,7 @@ void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
     u32 next_line_visual_len = 0;
     for (u32 i = next_line.begin; i < next_line.end; ) {
         next_line_visual_len += 1;
-        i += utf8_byte_size(b->data.items[i]);
+        i += utf8_cache[b->data.items[i]];
     }
 
     if (b->last_visual_col > next_line_visual_len) {
@@ -384,7 +393,7 @@ void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
     } else {
         b->cursor = next_line.begin;
         for (u32 i = 0; i < b->last_visual_col; ++i) {
-            b->cursor += utf8_byte_size(b->data.items[b->cursor]);
+            b->cursor += utf8_cache[b->data.items[b->cursor]];
         }
     }
 }
@@ -490,7 +499,7 @@ void move_right(buffer_t *b)
 {
     if (b->cursor == b->data.size) return;
 
-    b->cursor += utf8_byte_size(b->data.items[b->cursor]);
+    b->cursor += utf8_cache[b->data.items[b->cursor]];
     update_last_visual_col(b);
 }
 
@@ -499,7 +508,7 @@ void move_left(buffer_t *b)
     if (b->cursor == 0) return;
 
     b->cursor--;
-    while (utf8_byte_size(b->data.items[b->cursor]) == 0) {
+    while (utf8_cache[b->data.items[b->cursor]] == 0) {
         b->cursor--;
     }
 
@@ -598,8 +607,8 @@ void insert_char_at_cursor(buffer_t *b, char c)
     static u8 accum = 0;
     static char buf[4] = {0};
 
-    if (utf8_byte_size(c) > 0) {
-        size = utf8_byte_size(c);
+    if (utf8_cache[c] > 0) {
+        size = utf8_cache[c];
         accum = 0;
         memset(buf, 0, 4);
     }
@@ -638,11 +647,11 @@ void backspace(buffer_t *b)
     if (b->cursor == 0) return;
 
     b->cursor--;
-    while (utf8_byte_size(b->data.items[b->cursor]) == 0) {
+    while (utf8_cache[b->data.items[b->cursor]] == 0) {
         b->cursor--;
     }
 
-    u8 size = utf8_byte_size(b->data.items[b->cursor]);
+    u8 size = utf8_cache[b->data.items[b->cursor]];
     sb_delete_substr(&b->data, b->cursor, size);
 
     b->saved = false;
