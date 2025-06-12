@@ -11,27 +11,42 @@
 
 #include "scuffed.h"
 
-// terminal functions
+// #########################################################################
+// Render functions
+// #########################################################################
+
 void term_clear(u16 term_width, u16 term_height);
 void term_display(u16 term_width, u16 term_height);
 void render(buffer_t *b, u16 term_width, u16 term_height);
 
-// helper functions
+// #########################################################################
+// Utility functions
+// #########################################################################
+
 u32 get_cursor_row(buffer_t *b);
 u32 update_row_offset(buffer_t *b);
 u32 update_last_visual_col(buffer_t *b);
 void cache_utf8_byte_size(void);
 void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
 
-// lines functions
+// #########################################################################
+// Lines functions
+// #########################################################################
+
 u32 lines_tokenize(lines_t *line_tokens, const sb_t sb);
 
-// buffer functions
+// #########################################################################
+// Buffer functions
+// #########################################################################
+
 u32 buffer_create_from_file(buffer_t *b, const char *path);
 void buffer_save(buffer_t *b);
 void buffer_kill(buffer_t *b);
 
-// editor functions
+// #########################################################################
+// Editor functions
+// #########################################################################
+
 void move_down(buffer_t *b);
 void move_up(buffer_t *b);
 void move_right(buffer_t *b);
