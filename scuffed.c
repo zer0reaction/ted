@@ -186,15 +186,19 @@ int main(int argc, char **argv)
             case '$':
                 move_line_end(&b);
                 break;
-            case 'f':
-                center_cursor_line(&b);
-                break;
             case 'g':
                 move_top(&b);
                 break;
             case 'G':
                 move_bottom(&b);
                 break;
+
+            // screen operations
+            case 'f':
+                center_cursor_line(&b);
+                break;
+
+            // TODO skip rendering on 'default'
             }
         } else if (b.mode == INSERT_MODE) {
             switch (c) {
