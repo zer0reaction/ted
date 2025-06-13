@@ -231,6 +231,17 @@ int main(int argc, char **argv)
                 move_line_begin(&b);
                 b.mode = INSERT_MODE;
                 break;
+            case 'o':
+                move_line_end(&b);
+                insert_char_at_cursor(&b, '\n');
+                b.mode = INSERT_MODE;
+                break;
+            case 'O':
+                move_line_begin(&b);
+                insert_char_at_cursor(&b, '\n');
+                move_up(&b);
+                b.mode = INSERT_MODE;
+                break;
 
             // movement
             case 'j':
