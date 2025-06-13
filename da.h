@@ -53,11 +53,19 @@ static void name##_destroy(name *a) \
     a->data = NULL;                 \
     a->size = a->cap = 0;           \
 }                                   \
+\
 static T name##_at(const name *a, size_t i)             \
 {                                                       \
     assert(i < a->size && "Array index out of bounds"); \
     return a->data[i];                                  \
 }                                                       \
+\
+static void name##_clear(name *a)                   \
+{                                                   \
+    a->size = 0;                                    \
+    a->cap = DA_INIT_CAP;                           \
+    a->data = realloc(a->data, sizeof(T) * a->cap); \
+}                                                   \
 \
 static void name##_push_back(name *a, T item)           \
 {                                                       \
@@ -95,10 +103,10 @@ static T name##_pop_back(name *a)                           \
     return item;                                            \
 }                                                           \
 \
-static void name##_push(name    *a,                                         \
-                        size_t   pos,                                       \
-                        const T *items,                                     \
-                        size_t   n)                                         \
+static void name##_push_many(name    *a,                                    \
+                             size_t   pos,                                  \
+                             const T *items,                                \
+                             size_t   n)                                    \
 {                                                                           \
     assert(pos <= a->size && "Can't insert at this position");              \
                                                                             \

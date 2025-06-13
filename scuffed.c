@@ -59,7 +59,8 @@ typedef struct line_t {
 
 typedef enum buffer_mode_t {
     NORMAL_MODE = 0,
-    INSERT_MODE = 1
+    INSERT_MODE = 1,
+    REGION_MODE = 2
 } buffer_mode_t;
 
 DA_TYPEDEF(char, sb_t)
@@ -68,13 +69,17 @@ DA_TYPEDEF(line_t, lines_t)
 typedef struct buffer_t {
     sb_t data;
     sb_t path;
+    sb_t clipboard;
     lines_t lines;
 
     buffer_mode_t mode;
 
     u32 cursor;
-    u32 row_offset;
+    u32 row_offset; // only updated by renderer
     u32 last_visual_col;
+
+    u32 region_begin;
+    u32 region_end;
 
     u16 contents_width;
     u16 contents_height;
@@ -138,6 +143,12 @@ void center_cursor_line(buffer_t *b);
 void insert_char_at_cursor(buffer_t *b, char c);
 void insert_indent_spaces_at_cursor(buffer_t *b);
 void backspace(buffer_t *b);
+void begin_region(buffer_t *b);
+void end_region(buffer_t *b);
+void discard_region(buffer_t *b);
+void copy_region_append(buffer_t *b);
+void paste_clipboard_at_cursor(buffer_t *b);
+void clear_clipboard(buffer_t *b);
 
 u8 utf8_cache[256] = {0};
 utf8_char_t display_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
@@ -218,6 +229,12 @@ int main(int argc, char **argv)
             case 's':
                 buffer_save(&b);
                 break;
+            case 'y':
+                paste_clipboard_at_cursor(&b);
+                break;
+            case 'r':
+                clear_clipboard(&b);
+                break;
 
             // enterning insert mode
             case 'i':
@@ -241,6 +258,12 @@ int main(int argc, char **argv)
                 insert_char_at_cursor(&b, '\n');
                 move_up(&b);
                 b.mode = INSERT_MODE;
+                break;
+
+            // entering region mode
+            case 'v':
+                b.mode = REGION_MODE;
+                begin_region(&b);
                 break;
 
             // movement
@@ -286,6 +309,64 @@ int main(int argc, char **argv)
                 break;
 
             // TODO skip rendering on 'default'
+            }
+        } else if (b.mode == REGION_MODE) {
+            switch (c) {
+            // basic commands
+            case 'v':
+                discard_region(&b);
+                b.mode = NORMAL_MODE;
+                break;
+            case 'c':
+                end_region(&b);
+                copy_region_append(&b);
+                b.mode = NORMAL_MODE;
+                break;
+            case 'r':
+                clear_clipboard(&b);
+                break;
+
+            // movement
+            case 'j':
+                move_down(&b);
+                break;
+            case 'k':
+                move_up(&b);
+                break;
+            case 'l':
+                move_right(&b);
+                break;
+            case 'h':
+                move_left(&b);
+                break;
+            case 'n':
+                move_down_page(&b);
+                center_cursor_line(&b);
+                break;
+            case 'p':
+                move_up_page(&b);
+                center_cursor_line(&b);
+                break;
+            case '0':
+                move_line_first_char(&b);
+                break;
+            case '^':
+                move_line_begin(&b);
+                break;
+            case '$':
+                move_line_end(&b);
+                break;
+            case 'g':
+                move_top(&b);
+                break;
+            case 'G':
+                move_bottom(&b);
+                break;
+
+            // screen operations
+            case 'f':
+                center_cursor_line(&b);
+                break;
             }
         } else if (b.mode == INSERT_MODE) {
             switch (c) {
@@ -404,7 +485,12 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
 
     if (b->mode == INSERT_MODE) {
         strcat(status, " [insert]");
+    } else if (b->mode == REGION_MODE) {
+        strcat(status, " [region]");
     }
+
+    // TODO calculate length of clipboard
+    sprintf(&status[strlen(status)], " [%lu]", b->clipboard.size);
 
     u16 col_i = 0;
 
@@ -552,6 +638,8 @@ u32 buffer_create_from_file(buffer_t *b, const char *path)
     b->path = sb_t_create();
     sb_t_push_back_many(&b->path, path, strlen(path));
 
+    b->clipboard = sb_t_create();
+
     b->saved = true;
 
     fclose(fp);
@@ -576,6 +664,7 @@ void buffer_kill(buffer_t *b)
 {
     sb_t_destroy(&b->data);
     sb_t_destroy(&b->path);
+    sb_t_destroy(&b->clipboard);
     lines_t_destroy(&b->lines);
     memset(b, 0, sizeof(buffer_t));
 }
@@ -722,7 +811,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
     buf[accum++] = c;
 
     if (accum == size && accum != 0) {
-        sb_t_push(&b->data, b->cursor, buf, size);
+        sb_t_push_many(&b->data, b->cursor, buf, size);
 
         b->cursor += size;
 
@@ -740,7 +829,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
 void insert_indent_spaces_at_cursor(buffer_t *b)
 {
     const char buf[9] = "        "; // 8 spaces maximum
-    sb_t_push(&b->data, b->cursor, buf, INDENT_SPACES);
+    sb_t_push_many(&b->data, b->cursor, buf, INDENT_SPACES);
     b->cursor += INDENT_SPACES;
 
     tokenize_lines(&b->lines, &b->data);
@@ -763,4 +852,56 @@ void backspace(buffer_t *b)
     b->saved = false;
     tokenize_lines(&b->lines, &b->data);
     update_last_visual_col(b);
+}
+
+void begin_region(buffer_t *b)
+{
+    b->region_begin = b->region_end = b->cursor;
+}
+
+void end_region(buffer_t *b)
+{
+    if (b->cursor < b->region_begin) {
+        b->region_end = b->region_begin;
+        b->region_begin = b->cursor;
+    } else if (b->cursor > b->region_begin) {
+        b->region_end = b->cursor;
+    } else {
+        discard_region(b);
+    }
+}
+
+void discard_region(buffer_t *b)
+{
+    b->region_begin = b->region_end = 0;
+}
+
+void copy_region_append(buffer_t *b)
+{
+    if (b->region_begin == b->region_end) return;
+    assert(b->region_end > b->region_begin);
+
+    sb_t_push_back_many(&b->clipboard,
+                        &b->data.data[b->region_begin],
+                        b->region_end - b->region_begin);
+}
+
+void paste_clipboard_at_cursor(buffer_t *b)
+{
+    if (b->clipboard.size == 0) return;
+
+    sb_t_push_many(&b->data,
+                   b->cursor,
+                   b->clipboard.data,
+                   b->clipboard.size);
+
+    b->cursor += b->clipboard.size;
+    tokenize_lines(&b->lines, &b->data);
+    update_last_visual_col(b);
+    b->saved = false;
+}
+
+void clear_clipboard(buffer_t *b)
+{
+    sb_t_clear(&b->clipboard);
 }
