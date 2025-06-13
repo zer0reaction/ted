@@ -2,7 +2,7 @@
 
 # debug build
 CC='gcc'
-CFLAGS='-Wall -Wextra -std=c99 -pedantic -fsanitize=address'
+CFLAGS='-Wall -Wextra -Wno-unused-function -std=c99 -pedantic -fsanitize=address'
 LDFLAGS=''
 
 # static release build
