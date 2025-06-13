@@ -12,4 +12,4 @@ LDFLAGS=''
 
 set -xe
 
-$CC $CFLAGS -o scuffed scuffed.c $LDFLAGS
+$CC $CFLAGS -o ted ted.c $LDFLAGS
