@@ -95,11 +95,10 @@ static T name##_pop_back(name *a)                           \
     return item;                                            \
 }                                                           \
 \
-/* TODO rename to push */                                                   \
-static void name##_insert_many(name    *a,                                  \
-                               size_t   pos,                                \
-                               const T *items,                              \
-                               size_t   n)                                  \
+static void name##_push(name    *a,                                         \
+                        size_t   pos,                                       \
+                        const T *items,                                     \
+                        size_t   n)                                         \
 {                                                                           \
     assert(pos <= a->size && "Can't insert at this position");              \
                                                                             \

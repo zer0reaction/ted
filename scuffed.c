@@ -711,7 +711,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
     buf[accum++] = c;
 
     if (accum == size && accum != 0) {
-        sb_t_insert_many(&b->data, b->cursor, buf, size);
+        sb_t_push(&b->data, b->cursor, buf, size);
 
         b->cursor += size;
 
@@ -729,7 +729,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
 void insert_indent_spaces_at_cursor(buffer_t *b)
 {
     const char buf[9] = "        "; // 8 spaces maximum
-    sb_t_insert_many(&b->data, b->cursor, buf, INDENT_SPACES);
+    sb_t_push(&b->data, b->cursor, buf, INDENT_SPACES);
     b->cursor += INDENT_SPACES;
 
     tokenize_lines(&b->lines, &b->data);
