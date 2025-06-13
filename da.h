@@ -54,6 +54,14 @@ static void name##_destroy(name *a) \
     a->size = a->cap = 0;           \
 }                                   \
 \
+static void name##_shrink_to_fit(name *a)               \
+{                                                       \
+    if (a->size <= a->cap / 4) {                        \
+        a->cap = MAX(DA_INIT_CAP, a->size * 2);         \
+        a->data = realloc(a->data, sizeof(T) * a->cap); \
+    }                                                   \
+}                                                       \
+\
 static T name##_at(const name *a, size_t i)             \
 {                                                       \
     assert(i < a->size && "Array index out of bounds"); \
@@ -96,7 +104,7 @@ static T name##_pop_back(name *a)                           \
     a->size--;                                              \
                                                             \
     if (a->size <= a->cap / 4) {                            \
-        a->cap = MAX(DA_INIT_CAP, a->cap / 2);              \
+        a->cap = MAX(DA_INIT_CAP, a->size * 2);             \
         a->data = realloc(a->data, sizeof(T) * a->cap);     \
     }                                                       \
                                                             \
@@ -131,7 +139,7 @@ static void name##_delete_many(name *a, size_t pos, size_t n)       \
                                                                     \
     a->size -= n;                                                   \
     if (a->size <= a->cap / 4) {                                    \
-        a->cap = MAX(DA_INIT_CAP, a->cap / 2);                      \
+        a->cap = MAX(DA_INIT_CAP, a->size * 2);                     \
         a->data = realloc(a->data, sizeof(T) * a->cap);             \
     }                                                               \
 }

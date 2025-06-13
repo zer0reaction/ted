@@ -147,6 +147,7 @@ void begin_region(buffer_t *b);
 void end_region(buffer_t *b);
 void discard_region(buffer_t *b);
 void copy_region_append(buffer_t *b);
+void cut_region_append(buffer_t *b);
 void paste_clipboard_at_cursor(buffer_t *b);
 void clear_clipboard(buffer_t *b);
 
@@ -320,6 +321,11 @@ int main(int argc, char **argv)
             case 'c':
                 end_region(&b);
                 copy_region_append(&b);
+                b.mode = NORMAL_MODE;
+                break;
+            case 't':
+                end_region(&b);
+                cut_region_append(&b);
                 b.mode = NORMAL_MODE;
                 break;
             case 'r':
@@ -607,7 +613,7 @@ u32 tokenize_lines(lines_t *lines, sb_t *sb)
     line.end = sb->size;
     lines_t_push_back(lines, line);
 
-    // TODO resize if needed
+    lines_t_shrink_to_fit(lines);
 
     return lines->size;
 }
@@ -884,6 +890,24 @@ void copy_region_append(buffer_t *b)
     sb_t_push_back_many(&b->clipboard,
                         &b->data.data[b->region_begin],
                         b->region_end - b->region_begin);
+}
+
+void cut_region_append(buffer_t *b)
+{
+    if (b->region_begin == b->region_end) return;
+    assert(b->region_end > b->region_begin);
+
+    sb_t_push_back_many(&b->clipboard,
+                        &b->data.data[b->region_begin],
+                        b->region_end - b->region_begin);
+    sb_t_delete_many(&b->data,
+                     b->region_begin,
+                     b->region_end - b->region_begin);
+
+    b->cursor = b->region_begin;
+    tokenize_lines(&b->lines, &b->data);
+    update_last_visual_col(b);
+    b->saved = false;
 }
 
 void paste_clipboard_at_cursor(buffer_t *b)
