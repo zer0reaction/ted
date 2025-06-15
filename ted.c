@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <locale.h>
 
+#include <signal.h>
 #include <unistd.h>
 #include <termios.h>
 #include <sys/ioctl.h>
@@ -38,6 +39,9 @@ if (display_buffer[row_i][col_i].abs != (c).abs) {  \
 }
 
 #define TERM_MOVE_CURSOR(row, col) printf("\033[%d;%dH", row, col)
+
+#define CONTENTS_WIDTH (assert(term_width > 0), (u16)(term_width - 0))
+#define CONTENTS_HEIGHT (assert(term_height > 0), (u16)(term_height - 1))
 
 // #########################################################################
 // Type defenitions
@@ -81,9 +85,6 @@ typedef struct buffer_t {
     u32 region_begin;
     u32 region_end;
 
-    u16 contents_width;
-    u16 contents_height;
-
     bool saved;
 } buffer_t;
 
@@ -96,9 +97,9 @@ typedef union utf8_char_t {
 // Render functions
 // #########################################################################
 
-void term_clear(u16 term_width, u16 term_height);
-void term_display(u16 term_width, u16 term_height);
-void render(buffer_t *b, u16 term_width, u16 term_height);
+void term_clear(void);
+void term_display(void);
+void render(buffer_t *b);
 
 // #########################################################################
 // Utility functions
@@ -109,6 +110,12 @@ u32 update_row_offset(buffer_t *b);
 u32 update_last_visual_col(buffer_t *b);
 void cache_utf8_byte_size(void);
 void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
+
+// #########################################################################
+// Misc functions
+// #########################################################################
+
+void signal_handler(s32 signum);
 
 // #########################################################################
 // Lines functions
@@ -152,9 +159,16 @@ void delete_region(buffer_t *b);
 void paste_clipboard_at_cursor(buffer_t *b);
 void clear_clipboard(buffer_t *b);
 
+// #########################################################################
+// Global variables
+// #########################################################################
+
 u8 utf8_cache[256] = {0};
 utf8_char_t display_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
 bool dirty_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
+buffer_t *current_b = NULL;
+u16 term_width = 0;
+u16 term_height = 0;
 
 int main(int argc, char **argv)
 {
@@ -179,6 +193,7 @@ int main(int argc, char **argv)
         printf("no file found\n");
         return 1;
     }
+    current_b = &b;
 
     cache_utf8_byte_size();
 
@@ -197,27 +212,30 @@ int main(int argc, char **argv)
 
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_mode);
 
-    // TODO handle window resize
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)) {
         printf("ioctl failed\n");
         return 1;
     }
-    u16 term_width = ws.ws_col;
-    u16 term_height = ws.ws_row;
-    b.contents_width = term_width;
-    b.contents_height = term_height - 1;
+    term_width = ws.ws_col;
+    term_height = ws.ws_row;
 
     if (term_width > MAX_WIDTH || term_height > MAX_HEIGHT) {
         printf("terminal resolution is too high\n");
         return 1;
     }
 
+    struct sigaction sa;
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGWINCH, &sa, NULL);
+
     memset(dirty_buffer, 1, MAX_WIDTH * MAX_HEIGHT);
 
     bool should_close = false;
     while (!should_close) {
-        render(&b, term_width, term_height);
+        render(&b);
 
         char c;
         if (read(STDIN_FILENO, &c, 1) != 1) break;
@@ -408,7 +426,7 @@ int main(int argc, char **argv)
 // Render functions
 // #########################################################################
 
-void term_clear(u16 term_width, u16 term_height)
+void term_clear(void)
 {
     for (u16 row_i = 0; row_i < term_height; ++row_i) {
         for (u16 col_i = 0; col_i < term_width; ++col_i) {
@@ -417,7 +435,7 @@ void term_clear(u16 term_width, u16 term_height)
     }
 }
 
-void term_display(u16 term_width, u16 term_height)
+void term_display(void)
 {
     u16 row = 1;
 
@@ -446,9 +464,9 @@ void term_display(u16 term_width, u16 term_height)
     }
 }
 
-void render(buffer_t *b, u16 term_width, u16 term_height)
+void render(buffer_t *b)
 {
-    term_clear(term_width, term_height);
+    term_clear();
 
     u16 cursor_visual_col = 1;
     u32 cursor_row = update_row_offset(b);
@@ -518,7 +536,7 @@ void render(buffer_t *b, u16 term_width, u16 term_height)
     }
 
     printf("\033[?25l"); // hide cursor
-    term_display(term_width, term_height);
+    term_display();
     printf("\033[?25h"); // show cursor
 
     TERM_MOVE_CURSOR(cursor_row - b->row_offset + 1, cursor_visual_col);
@@ -547,8 +565,8 @@ u32 update_row_offset(buffer_t *b)
 
     if (relative_row < 0) {
         b->row_offset += relative_row;
-    } else if (relative_row + 1 > b->contents_height) {
-        b->row_offset += relative_row - (b->contents_height - 1);
+    } else if (relative_row + 1 > CONTENTS_HEIGHT) {
+        b->row_offset += relative_row - (CONTENTS_HEIGHT - 1);
     }
 
     return absolute_row;
@@ -595,6 +613,25 @@ void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
         for (u32 i = 0; i < b->last_visual_col; ++i) {
             b->cursor += UTF8_BYTE_SIZE(sb_t_at(&b->data, b->cursor));
         }
+    }
+}
+
+// #########################################################################
+// Misc functions
+// #########################################################################
+
+void signal_handler(s32 signum)
+{
+    if (signum == SIGWINCH) {
+        struct winsize ws;
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws); // TODO check ioctl fail
+        term_width = ws.ws_col;
+        term_height = ws.ws_row;
+
+        assert(current_b);
+        memset(dirty_buffer, 1, MAX_WIDTH * MAX_HEIGHT);
+        tokenize_lines(&current_b->lines, &current_b->data);
+        render(current_b);
     }
 }
 
@@ -728,10 +765,10 @@ void move_down_page(buffer_t *b)
     u32 cursor_row = get_cursor_row(b);
 
     line_t next_line = {0};
-    if (cursor_row + b->contents_height / 2 >= b->lines.size) {
+    if (cursor_row + CONTENTS_HEIGHT / 2 >= b->lines.size) {
         next_line = lines_t_at(&b->lines, b->lines.size - 1);
     } else {
-        next_line = lines_t_at(&b->lines, cursor_row + b->contents_height / 2);
+        next_line = lines_t_at(&b->lines, cursor_row + CONTENTS_HEIGHT / 2);
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
@@ -742,10 +779,10 @@ void move_up_page(buffer_t *b)
     u32 cursor_row = get_cursor_row(b);
 
     line_t next_line = {0};
-    if (cursor_row < b->contents_height / 2) {
+    if (cursor_row < CONTENTS_HEIGHT / 2) {
         next_line = lines_t_at(&b->lines, 0);
     } else {
-        next_line = lines_t_at(&b->lines, cursor_row - b->contents_height / 2);
+        next_line = lines_t_at(&b->lines, cursor_row - CONTENTS_HEIGHT / 2);
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
@@ -801,10 +838,10 @@ void center_cursor_line(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
-    if (cursor_row <= b->contents_height / 2) {
+    if (cursor_row <= CONTENTS_HEIGHT / 2) {
         b->row_offset = 0;
     } else {
-        b->row_offset = cursor_row - b->contents_height / 2;
+        b->row_offset = cursor_row - CONTENTS_HEIGHT / 2;
     }
 }
 
