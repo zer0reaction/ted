@@ -781,14 +781,14 @@ void move_line_end(buffer_t *b)
 void move_top(buffer_t *b)
 {
     b->cursor = 0;
-    update_last_visual_col(b);
+    b->last_visual_col = 0;
 }
 
 void move_bottom(buffer_t *b)
 {
     line_t bottom_line = lines_t_at(&b->lines, b->lines.size - 1);
     b->cursor = bottom_line.begin;
-    update_last_visual_col(b);
+    b->last_visual_col = 0;
 }
 
 void center_cursor_line(buffer_t *b)
@@ -829,6 +829,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
 
         b->saved = false;
         tokenize_lines(&b->lines, &b->data);
+        update_last_visual_col(b);
     }
 }
 
