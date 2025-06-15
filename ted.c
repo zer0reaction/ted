@@ -255,9 +255,9 @@ int main(int argc, char **argv)
                 b.mode = INSERT_MODE;
                 break;
             case 'O':
-                move_line_begin(&b);
-                insert_char_at_cursor(&b, '\n');
                 move_up(&b);
+                move_line_end(&b);
+                insert_char_at_cursor(&b, '\n');
                 b.mode = INSERT_MODE;
                 break;
 
