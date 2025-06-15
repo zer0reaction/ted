@@ -148,6 +148,7 @@ void end_region(buffer_t *b);
 void discard_region(buffer_t *b);
 void copy_region_append(buffer_t *b);
 void cut_region_append(buffer_t *b);
+void delete_region(buffer_t *b);
 void paste_clipboard_at_cursor(buffer_t *b);
 void clear_clipboard(buffer_t *b);
 
@@ -323,9 +324,14 @@ int main(int argc, char **argv)
                 copy_region_append(&b);
                 b.mode = NORMAL_MODE;
                 break;
-            case 't':
+            case 'x':
                 end_region(&b);
                 cut_region_append(&b);
+                b.mode = NORMAL_MODE;
+                break;
+            case 'd':
+                end_region(&b);
+                delete_region(&b);
                 b.mode = NORMAL_MODE;
                 break;
             case 'r':
@@ -901,6 +907,21 @@ void cut_region_append(buffer_t *b)
     sb_t_push_back_many(&b->clipboard,
                         &b->data.data[b->region_begin],
                         b->region_end - b->region_begin);
+    sb_t_delete_many(&b->data,
+                     b->region_begin,
+                     b->region_end - b->region_begin);
+
+    b->cursor = b->region_begin;
+    tokenize_lines(&b->lines, &b->data);
+    update_last_visual_col(b);
+    b->saved = false;
+}
+
+void delete_region(buffer_t *b)
+{
+    if (b->region_begin == b->region_end) return;
+    assert(b->region_end > b->region_begin);
+
     sb_t_delete_many(&b->data,
                      b->region_begin,
                      b->region_end - b->region_begin);
