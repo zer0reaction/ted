@@ -1,5 +1,5 @@
 /*
- * Dynamic array header - last edited by zer0 on 13 Jun 2025
+ * Dynamic array header - last edited by zer0 on 15 Jun 2025
  * Written in C99.
  * 
  * Usage:
@@ -77,8 +77,12 @@ static void name##_clear(name *a)                   \
 \
 static void name##_push_back(name *a, T item)           \
 {                                                       \
-    if (a->size + 1 > a->cap) {                         \
+    bool needs_realloc = false;                         \
+    while (a->size + 1 > a->cap) {                      \
         a->cap = MAX(DA_INIT_CAP, a->cap * 2);          \
+        needs_realloc = true;                           \
+    }                                                   \
+    if (needs_realloc) {                                \
         a->data = realloc(a->data, sizeof(T) * a->cap); \
     }                                                   \
                                                         \
@@ -88,10 +92,15 @@ static void name##_push_back(name *a, T item)           \
 \
 static void name##_push_back_many(name *a, const T* items, size_t n)    \
 {                                                                       \
-    if (a->size + n > a->cap) {                                         \
-        a->cap = MAX(DA_INIT_CAP, (a->size + n) * 2);                   \
+    bool needs_realloc = false;                                         \
+    while (a->size + n > a->cap) {                                      \
+        a->cap = MAX(DA_INIT_CAP, a->cap * 2);                          \
+        needs_realloc = true;                                           \
+    }                                                                   \
+    if (needs_realloc) {                                                \
         a->data = realloc(a->data, sizeof(T) * a->cap);                 \
     }                                                                   \
+                                                                        \
     memcpy(&a->data[a->size], items, sizeof(T) * n);                    \
     a->size += n;                                                       \
 }                                                                       \
@@ -118,8 +127,12 @@ static void name##_push_many(name    *a,                                    \
 {                                                                           \
     assert(pos <= a->size && "Can't insert at this position");              \
                                                                             \
-    if (a->size + n > a->cap) {                                             \
-        a->cap = MAX(DA_INIT_CAP, (a->size + n) * 2);                       \
+    bool needs_realloc = false;                                             \
+    while (a->size + n > a->cap) {                                          \
+        a->cap = MAX(DA_INIT_CAP, a->cap * 2);                              \
+        needs_realloc = true;                                               \
+    }                                                                       \
+    if (needs_realloc) {                                                    \
         a->data = realloc(a->data, sizeof(T) * a->cap);                     \
     }                                                                       \
                                                                             \
