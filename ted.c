@@ -97,67 +97,67 @@ typedef union utf8_char_t {
 // Render functions
 // #########################################################################
 
-void term_clear(void);
-void term_display(void);
-void render(buffer_t *b);
+static void term_clear(void);
+static void term_display(void);
+static void render(buffer_t *b);
 
 // #########################################################################
 // Utility functions
 // #########################################################################
 
-u32 get_cursor_row(buffer_t *b);
-u32 update_row_offset(buffer_t *b);
-u32 update_last_visual_col(buffer_t *b);
-void cache_utf8_byte_size(void);
-void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
+static u32 get_cursor_row(buffer_t *b);
+static u32 update_row_offset(buffer_t *b);
+static u32 update_last_visual_col(buffer_t *b);
+static void cache_utf8_byte_size(void);
+static void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
 
 // #########################################################################
 // Misc functions
 // #########################################################################
 
-void signal_handler(s32 signum);
+static void signal_handler(s32 signum);
 
 // #########################################################################
 // Lines functions
 // #########################################################################
 
-u32 tokenize_lines(lines_t *lines, sb_t *sb);
+static u32 tokenize_lines(lines_t *lines, sb_t *sb);
 
 // #########################################################################
 // Buffer functions
 // #########################################################################
 
-u32 buffer_create_from_file(buffer_t *b, const char *path);
-void buffer_save(buffer_t *b);
-void buffer_kill(buffer_t *b);
+static u32 buffer_create_from_file(buffer_t *b, const char *path);
+static void buffer_save(buffer_t *b);
+static void buffer_kill(buffer_t *b);
 
 // #########################################################################
 // Editor functions
 // #########################################################################
 
-void move_down(buffer_t *b);
-void move_up(buffer_t *b);
-void move_right(buffer_t *b);
-void move_left(buffer_t *b);
-void move_down_page(buffer_t *b);
-void move_up_page(buffer_t *b);
-void move_line_first_char(buffer_t *b);
-void move_line_begin(buffer_t *b);
-void move_line_end(buffer_t *b);
-void move_top(buffer_t *b);
-void move_bottom(buffer_t *b);
-void center_cursor_line(buffer_t *b);
-void insert_char_at_cursor(buffer_t *b, char c);
-void insert_indent_spaces_at_cursor(buffer_t *b);
-void backspace(buffer_t *b);
-void begin_region(buffer_t *b);
-void end_region(buffer_t *b);
-void discard_region(buffer_t *b);
-void copy_region_append(buffer_t *b);
-void cut_region_append(buffer_t *b);
-void delete_region(buffer_t *b);
-void paste_clipboard_at_cursor(buffer_t *b);
-void clear_clipboard(buffer_t *b);
+static void move_down(buffer_t *b);
+static void move_up(buffer_t *b);
+static void move_right(buffer_t *b);
+static void move_left(buffer_t *b);
+static void move_down_page(buffer_t *b);
+static void move_up_page(buffer_t *b);
+static void move_line_first_char(buffer_t *b);
+static void move_line_begin(buffer_t *b);
+static void move_line_end(buffer_t *b);
+static void move_top(buffer_t *b);
+static void move_bottom(buffer_t *b);
+static void center_cursor_line(buffer_t *b);
+static void insert_char_at_cursor(buffer_t *b, char c);
+static void insert_indent_spaces_at_cursor(buffer_t *b);
+static void backspace(buffer_t *b);
+static void begin_region(buffer_t *b);
+static void end_region(buffer_t *b);
+static void discard_region(buffer_t *b);
+static void copy_region_append(buffer_t *b);
+static void cut_region_append(buffer_t *b);
+static void delete_region(buffer_t *b);
+static void paste_clipboard_at_cursor(buffer_t *b);
+static void clear_clipboard(buffer_t *b);
 
 // #########################################################################
 // Global variables
@@ -426,6 +426,7 @@ int main(int argc, char **argv)
 // Render functions
 // #########################################################################
 
+static
 void term_clear(void)
 {
     for (u16 row_i = 0; row_i < term_height; ++row_i) {
@@ -435,6 +436,7 @@ void term_clear(void)
     }
 }
 
+static
 void term_display(void)
 {
     u16 row = 1;
@@ -464,6 +466,7 @@ void term_display(void)
     }
 }
 
+static
 void render(buffer_t *b)
 {
     term_clear();
@@ -547,6 +550,7 @@ void render(buffer_t *b)
 // Utility functions
 // #########################################################################
 
+static
 u32 get_cursor_row(buffer_t *b)
 {
     for (u32 i = 0; i < b->lines.size; ++i) {
@@ -558,6 +562,7 @@ u32 get_cursor_row(buffer_t *b)
     assert(0 && "unreachable");
 }
 
+static
 u32 update_row_offset(buffer_t *b)
 {
     s32 absolute_row = get_cursor_row(b);
@@ -572,6 +577,7 @@ u32 update_row_offset(buffer_t *b)
     return absolute_row;
 }
 
+static
 u32 update_last_visual_col(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -586,6 +592,7 @@ u32 update_last_visual_col(buffer_t *b)
     return cursor_row;
 }
 
+static
 void cache_utf8_byte_size(void)
 {
     for (u32 i = 0; i < 256; ++i) {
@@ -598,6 +605,7 @@ void cache_utf8_byte_size(void)
     }
 }
 
+static
 void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
 {
     u32 next_line_visual_len = 0;
@@ -620,6 +628,7 @@ void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
 // Misc functions
 // #########################################################################
 
+static
 void signal_handler(s32 signum)
 {
     if (signum == SIGWINCH) {
@@ -639,6 +648,7 @@ void signal_handler(s32 signum)
 // Lines functions
 // #########################################################################
 
+static
 u32 tokenize_lines(lines_t *lines, sb_t *sb)
 {
     lines->size = 0;
@@ -665,6 +675,7 @@ u32 tokenize_lines(lines_t *lines, sb_t *sb)
 // Buffer functions
 // #########################################################################
 
+static
 u32 buffer_create_from_file(buffer_t *b, const char *path)
 {
     memset(b, 0, sizeof(buffer_t));
@@ -695,6 +706,7 @@ u32 buffer_create_from_file(buffer_t *b, const char *path)
     return b->lines.size;
 }
 
+static
 void buffer_save(buffer_t *b)
 {
     char path[TEMP_BUF_SIZE] = {0};
@@ -709,6 +721,7 @@ void buffer_save(buffer_t *b)
     b->saved = true;
 }
 
+static
 void buffer_kill(buffer_t *b)
 {
     sb_t_destroy(&b->data);
@@ -722,6 +735,7 @@ void buffer_kill(buffer_t *b)
 // Editor functions
 // #########################################################################
 
+static
 void move_down(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -731,6 +745,7 @@ void move_down(buffer_t *b)
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
+static
 void move_up(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -740,6 +755,7 @@ void move_up(buffer_t *b)
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
+static
 void move_right(buffer_t *b)
 {
     if (b->cursor == b->data.size) return;
@@ -748,6 +764,7 @@ void move_right(buffer_t *b)
     update_last_visual_col(b);
 }
 
+static
 void move_left(buffer_t *b)
 {
     if (b->cursor == 0) return;
@@ -760,6 +777,7 @@ void move_left(buffer_t *b)
     update_last_visual_col(b);
 }
 
+static
 void move_down_page(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -774,6 +792,7 @@ void move_down_page(buffer_t *b)
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
+static
 void move_up_page(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -788,6 +807,7 @@ void move_up_page(buffer_t *b)
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
+static
 void move_line_first_char(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -798,6 +818,7 @@ void move_line_first_char(buffer_t *b)
     b->last_visual_col = 0;
 }
 
+static
 void move_line_begin(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -811,6 +832,7 @@ void move_line_begin(buffer_t *b)
     update_last_visual_col(b);
 }
 
+static
 void move_line_end(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -821,12 +843,14 @@ void move_line_end(buffer_t *b)
     update_last_visual_col(b);
 }
 
+static
 void move_top(buffer_t *b)
 {
     b->cursor = 0;
     b->last_visual_col = 0;
 }
 
+static
 void move_bottom(buffer_t *b)
 {
     line_t bottom_line = lines_t_at(&b->lines, b->lines.size - 1);
@@ -834,6 +858,7 @@ void move_bottom(buffer_t *b)
     b->last_visual_col = 0;
 }
 
+static
 void center_cursor_line(buffer_t *b)
 {
     u32 cursor_row = get_cursor_row(b);
@@ -845,6 +870,7 @@ void center_cursor_line(buffer_t *b)
     }
 }
 
+static
 void insert_char_at_cursor(buffer_t *b, char c)
 {
     static u8 size = 0;
@@ -876,6 +902,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
     }
 }
 
+static
 void insert_indent_spaces_at_cursor(buffer_t *b)
 {
     const char buf[9] = "        "; // 8 spaces maximum
@@ -887,6 +914,7 @@ void insert_indent_spaces_at_cursor(buffer_t *b)
     b->saved = false;
 }
 
+static
 void backspace(buffer_t *b)
 {
     if (b->cursor == 0) return;
@@ -904,11 +932,13 @@ void backspace(buffer_t *b)
     update_last_visual_col(b);
 }
 
+static
 void begin_region(buffer_t *b)
 {
     b->region_begin = b->region_end = b->cursor;
 }
 
+static
 void end_region(buffer_t *b)
 {
     if (b->cursor < b->region_begin) {
@@ -921,11 +951,13 @@ void end_region(buffer_t *b)
     }
 }
 
+static
 void discard_region(buffer_t *b)
 {
     b->region_begin = b->region_end = 0;
 }
 
+static
 void copy_region_append(buffer_t *b)
 {
     if (b->region_begin == b->region_end) return;
@@ -936,6 +968,7 @@ void copy_region_append(buffer_t *b)
                         b->region_end - b->region_begin);
 }
 
+static
 void cut_region_append(buffer_t *b)
 {
     if (b->region_begin == b->region_end) return;
@@ -954,6 +987,7 @@ void cut_region_append(buffer_t *b)
     b->saved = false;
 }
 
+static
 void delete_region(buffer_t *b)
 {
     if (b->region_begin == b->region_end) return;
@@ -969,6 +1003,7 @@ void delete_region(buffer_t *b)
     b->saved = false;
 }
 
+static
 void paste_clipboard_at_cursor(buffer_t *b)
 {
     if (b->clipboard.size == 0) return;
@@ -984,6 +1019,7 @@ void paste_clipboard_at_cursor(buffer_t *b)
     b->saved = false;
 }
 
+static
 void clear_clipboard(buffer_t *b)
 {
     sb_t_clear(&b->clipboard);
