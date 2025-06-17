@@ -231,7 +231,7 @@ int main(int argc, char **argv)
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    memset(dirty_buffer, 1, MAX_WIDTH * MAX_HEIGHT);
+    printf("\033c"); // clear, scrollback included
 
     bool should_close = false;
     while (!should_close) {
@@ -417,8 +417,7 @@ int main(int argc, char **argv)
 
     buffer_kill(&b);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_settings);
-    TERM_MOVE_CURSOR(term_height, 1);
-    printf("\033[2K"); // erase entire line
+    printf("\033c"); // clear, scrollback included
     return 0;
 }
 
