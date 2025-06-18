@@ -30,7 +30,11 @@
 // Utility macros
 // #########################################################################
 
-#define UTF8_BYTE_SIZE(c) (assert((u8)(c) <= 247), utf8_cache[(u8)(c)])
+#define UTF8_BYTESIZE(c)            \
+(                                   \
+    assert((u8)(c) <= 247),         \
+    utf8_bytesize_cache[(u8)(c)]    \
+)
 
 #define TERM_SET_CHAR(c, row_i, col_i)              \
 if (display_buffer[row_i][col_i].abs != (c).abs) {  \
@@ -56,27 +60,27 @@ typedef unsigned int u32;
 typedef signed long s64;
 typedef unsigned long u64;
 
-typedef struct line_t {
+typedef struct Line {
     u32 begin;
     u32 end;
-} line_t;
+} Line;
 
-typedef enum buffer_mode_t {
+typedef enum Mode {
     NORMAL_MODE = 0,
     INSERT_MODE = 1,
     REGION_MODE = 2
-} buffer_mode_t;
+} Mode;
 
-DA_TYPEDEF(char, sb_t)
-DA_TYPEDEF(line_t, lines_t)
+DA_TYPEDEF(char, SB)
+DA_TYPEDEF(Line, Lines)
 
-typedef struct buffer_t {
-    sb_t data;
-    sb_t path;
-    sb_t clipboard;
-    lines_t lines;
+typedef struct Buffer {
+    SB data;
+    SB path;
+    SB clipboard;
+    Lines lines;
 
-    buffer_mode_t mode;
+    Mode mode;
 
     u32 cursor;
     u32 row_offset; // only updated by renderer
@@ -86,12 +90,12 @@ typedef struct buffer_t {
     u32 region_end;
 
     bool saved;
-} buffer_t;
+} Buffer;
 
-typedef union utf8_char_t {
+typedef union Utf8_Char {
     char arr[5]; // 5th for null byte for printf
     u32 abs;
-} utf8_char_t;
+} Utf8_Char;
 
 // #########################################################################
 // Render functions
@@ -99,74 +103,77 @@ typedef union utf8_char_t {
 
 static void term_clear(void);
 static void term_display(void);
-static void render(buffer_t *b);
+static void render(Buffer *b);
 
 // #########################################################################
 // Utility functions
 // #########################################################################
 
-static u32 get_cursor_row(buffer_t *b);
-static u32 update_row_offset(buffer_t *b);
-static u32 update_last_visual_col(buffer_t *b);
-static void cache_utf8_byte_size(void);
-static void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line);
+static u32 get_cursor_row(Buffer *b);
+static u32 update_row_offset(Buffer *b);
+static u32 update_last_visual_col(Buffer *b);
+static void set_cursor_col_after_vertical_move(Buffer *b, Line next_line);
 
 // #########################################################################
 // Misc functions
 // #########################################################################
 
+static void cache_utf8_bytesize(void);
 static void signal_handler(s32 signum);
 
 // #########################################################################
 // Lines functions
 // #########################################################################
 
-static u32 tokenize_lines(lines_t *lines, sb_t *sb);
+static u32 tokenize_lines(Lines *lines, SB *sb);
 
 // #########################################################################
 // Buffer functions
 // #########################################################################
 
-static u32 buffer_create_from_file(buffer_t *b, const char *path);
-static void buffer_save(buffer_t *b);
-static void buffer_kill(buffer_t *b);
+static u32 buffer_create_from_file(Buffer *b, const char *path);
+static void buffer_save(Buffer *b);
+static void buffer_kill(Buffer *b);
 
 // #########################################################################
 // Editor functions
 // #########################################################################
 
-static void move_down(buffer_t *b);
-static void move_up(buffer_t *b);
-static void move_right(buffer_t *b);
-static void move_left(buffer_t *b);
-static void move_down_page(buffer_t *b);
-static void move_up_page(buffer_t *b);
-static void move_line_first_char(buffer_t *b);
-static void move_line_begin(buffer_t *b);
-static void move_line_end(buffer_t *b);
-static void move_top(buffer_t *b);
-static void move_bottom(buffer_t *b);
-static void center_cursor_line(buffer_t *b);
-static void insert_char_at_cursor(buffer_t *b, char c);
-static void insert_indent_spaces_at_cursor(buffer_t *b);
-static void backspace(buffer_t *b);
-static void begin_region(buffer_t *b);
-static void end_region(buffer_t *b);
-static void discard_region(buffer_t *b);
-static void copy_region_append(buffer_t *b);
-static void cut_region_append(buffer_t *b);
-static void delete_region(buffer_t *b);
-static void paste_clipboard_at_cursor(buffer_t *b);
-static void clear_clipboard(buffer_t *b);
+static void move_down(Buffer *b);
+static void move_up(Buffer *b);
+static void move_right(Buffer *b);
+static void move_left(Buffer *b);
+static void move_down_page(Buffer *b);
+static void move_up_page(Buffer *b);
+static void move_line_first_char(Buffer *b);
+static void move_line_begin(Buffer *b);
+static void move_line_end(Buffer *b);
+static void move_top(Buffer *b);
+static void move_bottom(Buffer *b);
+static void center_cursor_line(Buffer *b);
+static void insert_char_at_cursor(Buffer *b, char c);
+static void insert_indent_spaces_at_cursor(Buffer *b);
+static void backspace(Buffer *b);
+static void begin_region(Buffer *b);
+static void end_region(Buffer *b);
+static void discard_region(Buffer *b);
+static void copy_region_append(Buffer *b);
+static void cut_region_append(Buffer *b);
+static void delete_region(Buffer *b);
+static void paste_clipboard_at_cursor(Buffer *b);
+static void clear_clipboard(Buffer *b);
 
 // #########################################################################
 // Global variables
 // #########################################################################
 
-u8 utf8_cache[256] = {0};
-utf8_char_t display_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
+u8 utf8_bytesize_cache[256] = {0};
+
+Utf8_Char display_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
 bool dirty_buffer[MAX_HEIGHT][MAX_WIDTH] = {0};
-buffer_t *current_b = NULL;
+
+Buffer *current_b = NULL;
+
 u16 term_width = 0;
 u16 term_height = 0;
 
@@ -188,14 +195,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    buffer_t b = {0};
+    Buffer b = {0};
     if (buffer_create_from_file(&b, argv[1]) == 0) {
         printf("no file found\n");
         return 1;
     }
     current_b = &b;
 
-    cache_utf8_byte_size();
+    cache_utf8_bytesize();
 
     char stdout_buf[1024 * 256] = {0};
     setvbuf(stdout, stdout_buf, _IOFBF, 1024 * 256);
@@ -430,7 +437,7 @@ void term_clear(void)
 {
     for (u16 row_i = 0; row_i < term_height; ++row_i) {
         for (u16 col_i = 0; col_i < term_width; ++col_i) {
-            TERM_SET_CHAR((utf8_char_t){ .abs = 0 }, row_i, col_i);
+            TERM_SET_CHAR((Utf8_Char){ .abs = 0 }, row_i, col_i);
         }
     }
 }
@@ -466,14 +473,14 @@ void term_display(void)
 }
 
 static
-void render(buffer_t *b)
+void render(Buffer *b)
 {
     term_clear();
 
     u16 cursor_visual_col = 1;
     u32 cursor_row = update_row_offset(b);
 
-    utf8_char_t c = {0};
+    Utf8_Char c = {0};
 
     for (u32 row_i = 0; row_i + 1 < term_height; ++row_i) {
         if (b->row_offset + row_i >= b->lines.size) {
@@ -483,11 +490,11 @@ void render(buffer_t *b)
             continue;
         }
 
-        line_t line = lines_t_at(&b->lines, b->row_offset + row_i);
+        Line line = Lines_at(&b->lines, b->row_offset + row_i);
         u16 col_i = 0;
 
         for (u32 char_i = 0; char_i < line.end - line.begin;) {
-            u8 size = UTF8_BYTE_SIZE(sb_t_at(&b->data, line.begin + char_i));
+            u8 size = UTF8_BYTESIZE(SB_at(&b->data, line.begin + char_i));
 
             c.abs = 0;
             memcpy(c.arr, &b->data.data[line.begin + char_i], size);
@@ -500,7 +507,7 @@ void render(buffer_t *b)
         if (b->row_offset + row_i == cursor_row) {
             for (u32 k = line.begin; k < b->cursor;) {
                 cursor_visual_col++;
-                k += UTF8_BYTE_SIZE(sb_t_at(&b->data, k));
+                k += UTF8_BYTESIZE(SB_at(&b->data, k));
             }
         }
     }
@@ -527,7 +534,7 @@ void render(buffer_t *b)
     u16 col_i = 0;
 
     for (u16 i = 0; i < strlen(status) && i < term_width;) {
-        u8 size = UTF8_BYTE_SIZE(status[i]);
+        u8 size = UTF8_BYTESIZE(status[i]);
 
         c.abs = 0;
         memcpy(c.arr, &status[i], size);
@@ -550,10 +557,10 @@ void render(buffer_t *b)
 // #########################################################################
 
 static
-u32 get_cursor_row(buffer_t *b)
+u32 get_cursor_row(Buffer *b)
 {
     for (u32 i = 0; i < b->lines.size; ++i) {
-        line_t line = lines_t_at(&b->lines, i);
+        Line line = Lines_at(&b->lines, i);
         if (b->cursor >= line.begin && b->cursor <= line.end) {
             return i;
         }
@@ -562,7 +569,7 @@ u32 get_cursor_row(buffer_t *b)
 }
 
 static
-u32 update_row_offset(buffer_t *b)
+u32 update_row_offset(Buffer *b)
 {
     s32 absolute_row = get_cursor_row(b);
     s32 relative_row = absolute_row - b->row_offset;
@@ -577,40 +584,27 @@ u32 update_row_offset(buffer_t *b)
 }
 
 static
-u32 update_last_visual_col(buffer_t *b)
+u32 update_last_visual_col(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
-    line_t cursor_line = lines_t_at(&b->lines, cursor_row);
+    Line cursor_line = Lines_at(&b->lines, cursor_row);
 
     b->last_visual_col = 0;
     for (u32 i = cursor_line.begin; i < b->cursor; ) {
         b->last_visual_col++;
-        i += UTF8_BYTE_SIZE(sb_t_at(&b->data, i));
+        i += UTF8_BYTESIZE(SB_at(&b->data, i));
     }
 
     return cursor_row;
 }
 
 static
-void cache_utf8_byte_size(void)
-{
-    for (u32 i = 0; i < 256; ++i) {
-        if      (i <= 127)             utf8_cache[i] =  1;
-        else if (i >= 128 && i <= 191) utf8_cache[i] =  0;
-        else if (i >= 192 && i <= 223) utf8_cache[i] =  2;
-        else if (i >= 224 && i <= 239) utf8_cache[i] =  3;
-        else if (i >= 240 && i <= 247) utf8_cache[i] =  4;
-        // > 247 should be handled in macro
-    }
-}
-
-static
-void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
+void set_cursor_col_after_vertical_move(Buffer *b, Line next_line)
 {
     u32 next_line_visual_len = 0;
     for (u32 i = next_line.begin; i < next_line.end; ) {
         next_line_visual_len += 1;
-        i += UTF8_BYTE_SIZE(sb_t_at(&b->data, i));
+        i += UTF8_BYTESIZE(SB_at(&b->data, i));
     }
 
     if (b->last_visual_col > next_line_visual_len) {
@@ -618,7 +612,7 @@ void set_cursor_col_after_vertical_move(buffer_t *b, line_t next_line)
     } else {
         b->cursor = next_line.begin;
         for (u32 i = 0; i < b->last_visual_col; ++i) {
-            b->cursor += UTF8_BYTE_SIZE(sb_t_at(&b->data, b->cursor));
+            b->cursor += UTF8_BYTESIZE(SB_at(&b->data, b->cursor));
         }
     }
 }
@@ -643,29 +637,42 @@ void signal_handler(s32 signum)
     }
 }
 
+static
+void cache_utf8_bytesize(void)
+{
+    for (u32 i = 0; i < 256; ++i) {
+        if      (i <= 127)             utf8_bytesize_cache[i] =  1;
+        else if (i >= 128 && i <= 191) utf8_bytesize_cache[i] =  0;
+        else if (i >= 192 && i <= 223) utf8_bytesize_cache[i] =  2;
+        else if (i >= 224 && i <= 239) utf8_bytesize_cache[i] =  3;
+        else if (i >= 240 && i <= 247) utf8_bytesize_cache[i] =  4;
+        // > 247 should be handled in macro
+    }
+}
+
 // #########################################################################
 // Lines functions
 // #########################################################################
 
 static
-u32 tokenize_lines(lines_t *lines, sb_t *sb)
+u32 tokenize_lines(Lines *lines, SB *sb)
 {
     lines->size = 0;
 
-    line_t line = {0};
+    Line line = {0};
 
     for (u32 i = 0; i < sb->size; ++i) {
-        if (sb_t_at(sb, i) == '\n') {
+        if (SB_at(sb, i) == '\n') {
             line.end = i;
-            lines_t_push_back(lines, line);
+            Lines_push_back(lines, line);
             line.begin = i + 1;
             line.end = 0;
         }
     }
     line.end = sb->size;
-    lines_t_push_back(lines, line);
+    Lines_push_back(lines, line);
 
-    lines_t_shrink_to_fit(lines);
+    Lines_shrink_to_fit(lines);
 
     return lines->size;
 }
@@ -675,9 +682,9 @@ u32 tokenize_lines(lines_t *lines, sb_t *sb)
 // #########################################################################
 
 static
-u32 buffer_create_from_file(buffer_t *b, const char *path)
+u32 buffer_create_from_file(Buffer *b, const char *path)
 {
-    memset(b, 0, sizeof(buffer_t));
+    memset(b, 0, sizeof(Buffer));
 
     FILE *fp = fopen(path, "r");
     if (fp == NULL) return 0;
@@ -691,13 +698,13 @@ u32 buffer_create_from_file(buffer_t *b, const char *path)
     b->data.cap = file_size;
     fread(b->data.data, 1, file_size, fp);
 
-    b->lines = lines_t_create();
+    b->lines = Lines_create();
     tokenize_lines(&b->lines, &b->data);
 
-    b->path = sb_t_create();
-    sb_t_push_back_many(&b->path, path, strlen(path));
+    b->path = SB_create();
+    SB_push_back_many(&b->path, path, strlen(path));
 
-    b->clipboard = sb_t_create();
+    b->clipboard = SB_create();
 
     b->saved = true;
 
@@ -706,7 +713,7 @@ u32 buffer_create_from_file(buffer_t *b, const char *path)
 }
 
 static
-void buffer_save(buffer_t *b)
+void buffer_save(Buffer *b)
 {
     char path[TEMP_BUF_SIZE] = {0};
     strncpy(path, b->path.data, b->path.size);
@@ -721,13 +728,13 @@ void buffer_save(buffer_t *b)
 }
 
 static
-void buffer_kill(buffer_t *b)
+void buffer_kill(Buffer *b)
 {
-    sb_t_destroy(&b->data);
-    sb_t_destroy(&b->path);
-    sb_t_destroy(&b->clipboard);
-    lines_t_destroy(&b->lines);
-    memset(b, 0, sizeof(buffer_t));
+    SB_destroy(&b->data);
+    SB_destroy(&b->path);
+    SB_destroy(&b->clipboard);
+    Lines_destroy(&b->lines);
+    memset(b, 0, sizeof(Buffer));
 }
 
 // #########################################################################
@@ -735,41 +742,41 @@ void buffer_kill(buffer_t *b)
 // #########################################################################
 
 static
-void move_down(buffer_t *b)
+void move_down(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
     if (cursor_row + 1 == b->lines.size) return;
 
-    line_t next_line = lines_t_at(&b->lines, cursor_row + 1);
+    Line next_line = Lines_at(&b->lines, cursor_row + 1);
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
 static
-void move_up(buffer_t *b)
+void move_up(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
     if (cursor_row == 0) return;
 
-    line_t next_line = lines_t_at(&b->lines, cursor_row - 1);
+    Line next_line = Lines_at(&b->lines, cursor_row - 1);
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
 static
-void move_right(buffer_t *b)
+void move_right(Buffer *b)
 {
     if (b->cursor == b->data.size) return;
 
-    b->cursor += UTF8_BYTE_SIZE(sb_t_at(&b->data, b->cursor));
+    b->cursor += UTF8_BYTESIZE(SB_at(&b->data, b->cursor));
     update_last_visual_col(b);
 }
 
 static
-void move_left(buffer_t *b)
+void move_left(Buffer *b)
 {
     if (b->cursor == 0) return;
 
     b->cursor--;
-    while (UTF8_BYTE_SIZE(sb_t_at(&b->data, b->cursor)) == 0) {
+    while (UTF8_BYTESIZE(SB_at(&b->data, b->cursor)) == 0) {
         b->cursor--;
     }
 
@@ -777,40 +784,40 @@ void move_left(buffer_t *b)
 }
 
 static
-void move_down_page(buffer_t *b)
+void move_down_page(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
-    line_t next_line = {0};
+    Line next_line = {0};
     if (cursor_row + CONTENTS_HEIGHT / 2 >= b->lines.size) {
-        next_line = lines_t_at(&b->lines, b->lines.size - 1);
+        next_line = Lines_at(&b->lines, b->lines.size - 1);
     } else {
-        next_line = lines_t_at(&b->lines, cursor_row + CONTENTS_HEIGHT / 2);
+        next_line = Lines_at(&b->lines, cursor_row + CONTENTS_HEIGHT / 2);
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
 static
-void move_up_page(buffer_t *b)
+void move_up_page(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
-    line_t next_line = {0};
+    Line next_line = {0};
     if (cursor_row < CONTENTS_HEIGHT / 2) {
-        next_line = lines_t_at(&b->lines, 0);
+        next_line = Lines_at(&b->lines, 0);
     } else {
-        next_line = lines_t_at(&b->lines, cursor_row - CONTENTS_HEIGHT / 2);
+        next_line = Lines_at(&b->lines, cursor_row - CONTENTS_HEIGHT / 2);
     }
 
     set_cursor_col_after_vertical_move(b, next_line);
 }
 
 static
-void move_line_first_char(buffer_t *b)
+void move_line_first_char(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
-    line_t cursor_line = lines_t_at(&b->lines, cursor_row);
+    Line cursor_line = Lines_at(&b->lines, cursor_row);
 
     b->cursor = cursor_line.begin;
 
@@ -818,13 +825,13 @@ void move_line_first_char(buffer_t *b)
 }
 
 static
-void move_line_begin(buffer_t *b)
+void move_line_begin(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
-    line_t cursor_line = lines_t_at(&b->lines, cursor_row);
+    Line cursor_line = Lines_at(&b->lines, cursor_row);
 
     b->cursor = cursor_line.begin;
-    while (sb_t_at(&b->data, b->cursor) == ' ') {
+    while (SB_at(&b->data, b->cursor) == ' ') {
         b->cursor += 1;
     }
 
@@ -832,10 +839,10 @@ void move_line_begin(buffer_t *b)
 }
 
 static
-void move_line_end(buffer_t *b)
+void move_line_end(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
-    line_t cursor_line = lines_t_at(&b->lines, cursor_row);
+    Line cursor_line = Lines_at(&b->lines, cursor_row);
 
     b->cursor = cursor_line.end;
 
@@ -843,22 +850,22 @@ void move_line_end(buffer_t *b)
 }
 
 static
-void move_top(buffer_t *b)
+void move_top(Buffer *b)
 {
     b->cursor = 0;
     b->last_visual_col = 0;
 }
 
 static
-void move_bottom(buffer_t *b)
+void move_bottom(Buffer *b)
 {
-    line_t bottom_line = lines_t_at(&b->lines, b->lines.size - 1);
+    Line bottom_line = Lines_at(&b->lines, b->lines.size - 1);
     b->cursor = bottom_line.begin;
     b->last_visual_col = 0;
 }
 
 static
-void center_cursor_line(buffer_t *b)
+void center_cursor_line(Buffer *b)
 {
     u32 cursor_row = get_cursor_row(b);
 
@@ -870,14 +877,14 @@ void center_cursor_line(buffer_t *b)
 }
 
 static
-void insert_char_at_cursor(buffer_t *b, char c)
+void insert_char_at_cursor(Buffer *b, char c)
 {
     static u8 size = 0;
     static u8 accum = 0;
     static char buf[4] = {0};
 
-    if (UTF8_BYTE_SIZE(c) > 0) {
-        size = UTF8_BYTE_SIZE(c);
+    if (UTF8_BYTESIZE(c) > 0) {
+        size = UTF8_BYTESIZE(c);
         accum = 0;
         memset(buf, 0, 4);
     }
@@ -885,7 +892,7 @@ void insert_char_at_cursor(buffer_t *b, char c)
     buf[accum++] = c;
 
     if (accum == size && accum != 0) {
-        sb_t_push_many(&b->data, b->cursor, buf, size);
+        SB_push_many(&b->data, b->cursor, buf, size);
 
         b->cursor += size;
 
@@ -902,10 +909,10 @@ void insert_char_at_cursor(buffer_t *b, char c)
 }
 
 static
-void insert_indent_spaces_at_cursor(buffer_t *b)
+void insert_indent_spaces_at_cursor(Buffer *b)
 {
     const char buf[9] = "        "; // 8 spaces maximum
-    sb_t_push_many(&b->data, b->cursor, buf, INDENT_SPACES);
+    SB_push_many(&b->data, b->cursor, buf, INDENT_SPACES);
     b->cursor += INDENT_SPACES;
 
     tokenize_lines(&b->lines, &b->data);
@@ -914,17 +921,17 @@ void insert_indent_spaces_at_cursor(buffer_t *b)
 }
 
 static
-void backspace(buffer_t *b)
+void backspace(Buffer *b)
 {
     if (b->cursor == 0) return;
 
     b->cursor--;
-    while (UTF8_BYTE_SIZE(sb_t_at(&b->data, b->cursor)) == 0) {
+    while (UTF8_BYTESIZE(SB_at(&b->data, b->cursor)) == 0) {
         b->cursor--;
     }
 
-    u8 size = UTF8_BYTE_SIZE(sb_t_at(&b->data, b->cursor));
-    sb_t_delete_many(&b->data, b->cursor, size);
+    u8 size = UTF8_BYTESIZE(SB_at(&b->data, b->cursor));
+    SB_delete_many(&b->data, b->cursor, size);
 
     b->saved = false;
     tokenize_lines(&b->lines, &b->data);
@@ -932,13 +939,13 @@ void backspace(buffer_t *b)
 }
 
 static
-void begin_region(buffer_t *b)
+void begin_region(Buffer *b)
 {
     b->region_begin = b->region_end = b->cursor;
 }
 
 static
-void end_region(buffer_t *b)
+void end_region(Buffer *b)
 {
     if (b->cursor < b->region_begin) {
         b->region_end = b->region_begin;
@@ -951,32 +958,32 @@ void end_region(buffer_t *b)
 }
 
 static
-void discard_region(buffer_t *b)
+void discard_region(Buffer *b)
 {
     b->region_begin = b->region_end = 0;
 }
 
 static
-void copy_region_append(buffer_t *b)
+void copy_region_append(Buffer *b)
 {
     if (b->region_begin == b->region_end) return;
     assert(b->region_end > b->region_begin);
 
-    sb_t_push_back_many(&b->clipboard,
+    SB_push_back_many(&b->clipboard,
                         &b->data.data[b->region_begin],
                         b->region_end - b->region_begin);
 }
 
 static
-void cut_region_append(buffer_t *b)
+void cut_region_append(Buffer *b)
 {
     if (b->region_begin == b->region_end) return;
     assert(b->region_end > b->region_begin);
 
-    sb_t_push_back_many(&b->clipboard,
+    SB_push_back_many(&b->clipboard,
                         &b->data.data[b->region_begin],
                         b->region_end - b->region_begin);
-    sb_t_delete_many(&b->data,
+    SB_delete_many(&b->data,
                      b->region_begin,
                      b->region_end - b->region_begin);
 
@@ -987,12 +994,12 @@ void cut_region_append(buffer_t *b)
 }
 
 static
-void delete_region(buffer_t *b)
+void delete_region(Buffer *b)
 {
     if (b->region_begin == b->region_end) return;
     assert(b->region_end > b->region_begin);
 
-    sb_t_delete_many(&b->data,
+    SB_delete_many(&b->data,
                      b->region_begin,
                      b->region_end - b->region_begin);
 
@@ -1003,11 +1010,11 @@ void delete_region(buffer_t *b)
 }
 
 static
-void paste_clipboard_at_cursor(buffer_t *b)
+void paste_clipboard_at_cursor(Buffer *b)
 {
     if (b->clipboard.size == 0) return;
 
-    sb_t_push_many(&b->data,
+    SB_push_many(&b->data,
                    b->cursor,
                    b->clipboard.data,
                    b->clipboard.size);
@@ -1019,7 +1026,7 @@ void paste_clipboard_at_cursor(buffer_t *b)
 }
 
 static
-void clear_clipboard(buffer_t *b)
+void clear_clipboard(Buffer *b)
 {
-    sb_t_clear(&b->clipboard);
+    SB_clear(&b->clipboard);
 }
