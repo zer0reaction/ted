@@ -177,6 +177,7 @@ Buffer *current_b = NULL;
 u16 term_width = 0;
 u16 term_height = 0;
 
+
 int main(int argc, char **argv)
 {
     assert(sizeof(u8) == 1);
@@ -693,10 +694,9 @@ u32 buffer_create_from_file(Buffer *b, const char *path)
     u32 file_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    b->data.data = malloc(file_size);
-    b->data.size = file_size;
-    b->data.cap = file_size;
+    SB_reserve_cap(&b->data, file_size);
     fread(b->data.data, 1, file_size, fp);
+    b->data.size = file_size;
 
     b->lines = Lines_create();
     tokenize_lines(&b->lines, &b->data);

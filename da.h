@@ -1,5 +1,5 @@
 /*
- * Dynamic array header - last edited by zer0 on 18 Jun 2025
+ * Dynamic array header - last edited by zer0 on 24 Jun 2025
  * Written in C99.
  * 
  * Usage:
@@ -67,6 +67,15 @@ static void name##_shrink_to_fit(name *a)               \
 {                                                       \
     if (a->size <= a->cap / 4) {                        \
         a->cap = MAX(DA_INIT_CAP, a->size * 2);         \
+        a->data = realloc(a->data, sizeof(T) * a->cap); \
+        assert(a->data && "Buy more RAM");              \
+    }                                                   \
+}                                                       \
+\
+static void name##_reserve_cap(name *a, size_t new_cap) \
+{                                                       \
+    if (new_cap > a->cap) {                             \
+        a->cap = new_cap;                               \
         a->data = realloc(a->data, sizeof(T) * a->cap); \
         assert(a->data && "Buy more RAM");              \
     }                                                   \
